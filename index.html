@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Session Planner & Club Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-200 text-slate-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        function TacticalSketchpad({ initialData, onSave }) {
+            const canvasRef = React.useRef(null);
+            const [tool, setTool] = React.useState('select'); 
+            const [elements, setElements] = React.useState(initialData || []);
+            const [dragState, setDragState] = React.useState(null); 
+            const [fieldMode, setFieldMode] = React.useState('full'); 
+            const [snapGrid, setSnapGrid] = React.useState(false);
+            const [playerNumberInput, setPlayerNumberInput] = React.useState('9');
+
+            const GRID_SIZE = 20;
+
+            React.useEffect(() => {
+                redrawCanvas();
+                onSave(elements);
+            }, [elements, dragState, fieldMode, snapGrid]);
+
+            const snap = (val) => {
+                if (!snapGrid) return val;
+                return Math.round(val / GRID_SIZE) * GRID_SIZE;
+            };
+
+            const redrawCanvas = () => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = '#166534';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+
+                if (fieldMode === 'full') {
+                    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+                    ctx.beginPath();
+                    ctx.moveTo(10, canvas.height / 2);
+                    ctx.lineTo(canvas.width - 10, canvas.height / 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(canvas.width / 2, canvas.height / 2, 25, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(canvas.width / 2, canvas.height / 2, 2, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.strokeRect(canvas.width / 2 - 40, 10, 80, 22);
+                    ctx.strokeRect(canvas.width / 2 - 40, canvas.height - 32, 80, 22);
+                } else if (fieldMode === 'half') {
+                    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+                    ctx.strokeRect(canvas.width / 2 - 50, 10, 100, 35);
+                    ctx.strokeRect(canvas.width / 2 - 25, 10, 50, 12);
+                    ctx.beginPath();
+                    ctx.arc(canvas.width / 2, 45, 25, 0, Math.PI);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(canvas.width / 2, 10, 2, 0, 2 * Math.PI);
+                    ctx.fill();
+                } else if (fieldMode === 'third') {
+                    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+                    ctx.strokeRect(canvas.width / 2 - 55, 10, 110, 45);
+                    ctx.strokeRect(canvas.width / 2 - 25, 10, 50, 15);
+                }
+
+                if (snapGrid) {
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+                    ctx.lineWidth = 0.5;
+                    for (let x = 0; x < canvas.width; x += GRID_SIZE) {
+                        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+                    }
+                    for (let y = 0; y < canvas.height; y += GRID_SIZE) {
+                        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+                    }
+                }
+
+                elements.forEach((el, idx) => {
+                    drawElement(ctx, el, dragState && dragState.index === idx);
+                });
+            };
+
+            const drawElement = (ctx, el, isSelected) => {
+                ctx.save();
+                if (el.type === 'red_player' || el.type === 'blue_player') {
+                    ctx.fillStyle = el.type === 'red_player' ? '#ef4444' : '#3b82f6';
+                    ctx.strokeStyle = isSelected ? '#facc15' : '#ffffff';
+                    ctx.lineWidth = isSelected ? 3 : 2;
+                    ctx.beginPath();
+                    ctx.arc(el.x, el.y, 10, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    if (el.label) {
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = 'bold 9px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(el.label, el.x, el.y);
+                    }
+                } else if (el.type === 'cone') {
+                    ctx.fillStyle = '#facc15';
+                    ctx.strokeStyle = isSelected ? '#ffffff' : '#ca8a04';
+                    ctx.lineWidth = isSelected ? 2 : 1;
+                    ctx.beginPath();
+                    ctx.moveTo(el.x, el.y - 8);
+                    ctx.lineTo(el.x - 7, el.y + 6);
+                    ctx.lineTo(el.x + 7, el.y + 6);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                } else if (el.type === 'pole') {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(el.x - 2, el.y - 10, 4, 20);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(el.x - 2, el.y - 10, 4, 7);
+                    if (isSelected) {
+                        ctx.strokeStyle = '#facc15';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(el.x - 5, el.y - 12, 10, 24);
+                    }
+                } else if (el.type === 'goal') {
+                    ctx.strokeStyle = isSelected ? '#facc15' : '#f8fafc';
+                    ctx.lineWidth = isSelected ? 3 : 2;
+                    ctx.save();
+                    ctx.translate(el.x, el.y);
+                    if (el.rotation) ctx.rotate(el.rotation);
+                    ctx.strokeRect(-15, -5, 30, 10);
+                    ctx.restore();
+                } else if (el.type === 'pass' || el.type === 'dribble') {
+                    ctx.strokeStyle = el.type === 'pass' ? '#ffffff' : '#facc15';
+                    ctx.lineWidth = isSelected ? 3 : 2;
+                    if (el.type === 'dribble') ctx.setLineDash([4, 4]);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(el.startX, el.startY);
+                    ctx.lineTo(el.endX, el.endY);
+                    ctx.stroke();
+
+                    const angle = Math.atan2(el.endY - el.startY, el.endX - el.startX);
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = ctx.strokeStyle;
+                    ctx.beginPath();
+                    ctx.moveTo(el.endX, el.endY);
+                    ctx.lineTo(el.endX - 8 * Math.cos(angle - Math.PI / 6), el.endY - 8 * Math.sin(angle - Math.PI / 6));
+                    ctx.lineTo(el.endX - 8 * Math.cos(angle + Math.PI / 6), el.endY - 8 * Math.sin(angle + Math.PI / 6));
+                    ctx.lineTo(el.endX, el.endY);
+                    ctx.fill();
+
+                    if (isSelected) {
+                        ctx.fillStyle = '#facc15';
+                        ctx.beginPath();
+                        ctx.arc(el.startX, el.startY, 5, 0, 2 * Math.PI);
+                        ctx.arc(el.endX, el.endY, 5, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }
+                } else if (el.type === 'freehand' && el.points && el.points.length > 0) {
+                    ctx.strokeStyle = isSelected ? '#facc15' : '#f8fafc';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(el.points[0].x, el.points[0].y);
+                    for (let p = 1; p < el.points.length; p++) {
+                        ctx.lineTo(el.points[p].x, el.points[p].y);
+                    }
+                    ctx.stroke();
+                }
+                ctx.restore();
+            };
+
+            const addFormationPreset = (formationType) => {
+                const cx = 140;
+                const cy = 85;
+                let newPlayers = [];
+
+                if (formationType === '4-3-3') {
+                    newPlayers = [
+                        { type: 'blue_player', x: cx, y: cy + 60, label: '1', rotation: 0 },
+                        { type: 'blue_player', x: cx - 50, y: cy + 30, label: '2', rotation: 0 },
+                        { type: 'blue_player', x: cx - 20, y: cy + 35, label: '4', rotation: 0 },
+                        { type: 'blue_player', x: cx + 20, y: cy + 35, label: '5', rotation: 0 },
+                        { type: 'blue_player', x: cx + 50, y: cy + 30, label: '3', rotation: 0 },
+                        { type: 'blue_player', x: cx, y: cy, label: '6', rotation: 0 },
+                        { type: 'blue_player', x: cx - 25, y: cy - 15, label: '8', rotation: 0 },
+                        { type: 'blue_player', x: cx + 25, y: cy - 15, label: '10', rotation: 0 },
+                        { type: 'blue_player', x: cx - 50, y: cy - 40, label: '7', rotation: 0 },
+                        { type: 'blue_player', x: cx, y: cy - 45, label: '9', rotation: 0 },
+                        { type: 'blue_player', x: cx + 50, y: cy - 40, label: '11', rotation: 0 },
+                    ];
+                } else if (formationType === '4-4-2') {
+                    newPlayers = [
+                        { type: 'blue_player', x: cx, y: cy + 60, label: '1', rotation: 0 },
+                        { type: 'blue_player', x: cx - 50, y: cy + 30, label: '2', rotation: 0 },
+                        { type: 'blue_player', x: cx - 20, y: cy + 35, label: '4', rotation: 0 },
+                        { type: 'blue_player', x: cx + 20, y: cy + 35, label: '5', rotation: 0 },
+                        { type: 'blue_player', x: cx + 50, y: cy + 30, label: '3', rotation: 0 },
+                        { type: 'blue_player', x: cx - 50, y: cy, label: '7', rotation: 0 },
+                        { type: 'blue_player', x: cx - 20, y: cy, label: '6', rotation: 0 },
+                        { type: 'blue_player', x: cx + 20, y: cy, label: '8', rotation: 0 },
+                        { type: 'blue_player', x: cx + 50, y: cy, label: '11', rotation: 0 },
+                        { type: 'blue_player', x: cx - 15, y: cy - 40, label: '10', rotation: 0 },
+                        { type: 'blue_player', x: cx + 15, y: cy - 40, label: '9', rotation: 0 },
+                    ];
+                }
+                setElements([...elements, ...newPlayers]);
+            };
+
+            const handleStart = (clientX, clientY) => {
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const x = clientX - rect.left;
+                const y = clientY - rect.top;
+
+                if (tool === 'erase') {
+                    setElements(elements.filter(el => {
+                        if (el.x !== undefined) return Math.hypot(el.x - x, el.y - y) > 15;
+                        if (el.points) return true;
+                        return Math.hypot(el.startX - x, el.startY - y) > 15 && Math.hypot(el.endX - x, el.endY - y) > 15;
+                    }));
+                    return;
+                }
+
+                if (tool === 'freehand') {
+                    const newEl = { type: 'freehand', points: [{x, y}] };
+                    setElements([...elements, newEl]);
+                    setDragState({ index: elements.length, type: 'freehand' });
+                    return;
+                }
+
+                for (let i = elements.length - 1; i >= 0; i--) {
+                    const el = elements[i];
+                    if (el.x !== undefined && el.y !== undefined) {
+                        if (Math.hypot(el.x - x, el.y - y) < 14) {
+                            setDragState({ index: i, type: 'item', offsetX: x - el.x, offsetY: y - el.y });
+                            return;
+                        }
+                    } else if (el.startX !== undefined) {
+                        if (Math.hypot(el.startX - x, el.startY - y) < 12) {
+                            setDragState({ index: i, type: 'start' });
+                            return;
+                        }
+                        if (Math.hypot(el.endX - x, el.endY - y) < 12) {
+                            setDragState({ index: i, type: 'end' });
+                            return;
+                        }
+                    }
+                }
+
+                if (tool === 'select') {
+                    setDragState(null);
+                    return;
+                }
+
+                if (tool === 'pass' || tool === 'dribble') {
+                    const newEl = { type: tool, startX: snap(x), startY: snap(y), endX: snap(x + 40), endY: snap(y) };
+                    setElements([...elements, newEl]);
+                    setDragState({ index: elements.length, type: 'end' });
+                } else if (tool === 'red_player' || tool === 'blue_player') {
+                    const newEl = { type: tool, x: snap(x), y: snap(y), label: playerNumberInput, rotation: 0 };
+                    setElements([...elements, newEl]);
+                    setDragState({ index: elements.length, type: 'item', offsetX: 0, offsetY: 0 });
+                } else {
+                    const newEl = { type: tool, x: snap(x), y: snap(y), rotation: 0 };
+                    setElements([...elements, newEl]);
+                    setDragState({ index: elements.length, type: 'item', offsetX: 0, offsetY: 0 });
+                }
+            };
+
+            const handleMove = (clientX, clientY) => {
+                if (!dragState) return;
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                const x = clientX - rect.left;
+                const y = clientY - rect.top;
+
+                const updated = [...elements];
+                const item = { ...updated[dragState.index] };
+
+                if (dragState.type === 'freehand') {
+                    item.points = [...item.points, { x, y }];
+                } else if (dragState.type === 'item') {
+                    item.x = snap(x - dragState.offsetX);
+                    item.y = snap(y - dragState.offsetY);
+                } else if (dragState.type === 'start') {
+                    item.startX = snap(x);
+                    item.startY = snap(y);
+                } else if (dragState.type === 'end') {
+                    item.endX = snap(x);
+                    item.endY = snap(y);
+                }
+
+                updated[dragState.index] = item;
+                setElements(updated);
+            };
+
+            const handleMouseDown = (e) => handleStart(e.clientX, e.clientY);
+            const handleMouseMove = (e) => handleMove(e.clientX, e.clientY);
+            const handleMouseUp = () => setDragState(null);
+
+            const handleTouchStart = (e) => {
+                if (e.touches.length === 1) {
+                    handleStart(e.touches[0].clientX, e.touches[0].clientY);
+                }
+            };
+            const handleTouchMove = (e) => {
+                if (e.touches.length === 1) {
+                    handleMove(e.touches[0].clientX, e.touches[0].clientY);
+                }
+            };
+            const handleTouchEnd = () => setDragState(null);
+
+            const rotateSelectedGoal = () => {
+                if (dragState === null) return;
+                const updated = [...elements];
+                const item = updated[dragState.index];
+                if (item && item.type === 'goal') {
+                    item.rotation = (item.rotation || 0) + Math.PI / 2;
+                    setElements(updated);
+                }
+            };
+
+            return (
+                <div className="flex flex-col items-center bg-slate-900 p-2 rounded text-white w-full">
+                    <div className="flex flex-wrap justify-between items-center w-full mb-1.5 gap-1 text-[9px]">
+                        <div className="flex gap-1 items-center flex-wrap">
+                            <span className="font-bold text-slate-300">Tool:</span>
+                            <button onClick={() => setTool('select')} className={`px-1.5 py-0.5 rounded ${tool === 'select' ? 'bg-emerald-500 font-bold' : 'bg-slate-700'}`}>Select</button>
+                            <button onClick={() => setTool('pass')} className={`px-1.5 py-0.5 rounded ${tool === 'pass' ? 'bg-white text-slate-900 font-bold' : 'bg-slate-700'}`}>Pass</button>
+                            <button onClick={() => setTool('dribble')} className={`px-1.5 py-0.5 rounded ${tool === 'dribble' ? 'bg-yellow-400 text-slate-900 font-bold' : 'bg-slate-700'}`}>Dribble</button>
+                            <button onClick={() => setTool('freehand')} className={`px-1.5 py-0.5 rounded ${tool === 'freehand' ? 'bg-cyan-500 font-bold' : 'bg-slate-700'}`}>Sketch</button>
+                            <button onClick={() => setTool('red_player')} className={`px-1.5 py-0.5 rounded ${tool === 'red_player' ? 'bg-red-500 font-bold' : 'bg-slate-700'}`}>Red</button>
+                            <button onClick={() => setTool('blue_player')} className={`px-1.5 py-0.5 rounded ${tool === 'blue_player' ? 'bg-blue-500 font-bold' : 'bg-slate-700'}`}>Blue</button>
+                            <div className="flex items-center bg-slate-700 px-1 rounded">
+                                <span className="text-[8px] mr-1">No:</span>
+                                <input type="text" value={playerNumberInput} onChange={(e) => setPlayerNumberInput(e.target.value)} className="w-5 bg-slate-800 text-center text-white rounded text-[9px]" />
+                            </div>
+                            <button onClick={() => setTool('cone')} className={`px-1.5 py-0.5 rounded ${tool === 'cone' ? 'bg-yellow-500 text-slate-900 font-bold' : 'bg-slate-700'}`}>Cone</button>
+                            <button onClick={() => setTool('pole')} className={`px-1.5 py-0.5 rounded ${tool === 'pole' ? 'bg-slate-300 text-slate-900 font-bold' : 'bg-slate-700'}`}>Pole</button>
+                            <button onClick={() => setTool('goal')} className={`px-1.5 py-0.5 rounded ${tool === 'goal' ? 'bg-slate-300 text-slate-900 font-bold' : 'bg-slate-700'}`}>Goal</button>
+                            <button onClick={() => setTool('erase')} className={`px-1.5 py-0.5 rounded ${tool === 'erase' ? 'bg-orange-600 font-bold' : 'bg-slate-700'}`}>Eraser</button>
+                        </div>
+                        <button onClick={() => setElements([])} className="bg-red-600 px-2 py-0.5 rounded text-[9px]">Clear Pitch</button>
+                    </div>
+
+                    <div className="flex flex-wrap justify-between items-center w-full mb-1.5 px-1 py-1 bg-slate-800 rounded text-[8px] gap-1">
+                        <div className="flex gap-1 items-center flex-wrap">
+                            <span className="text-slate-400 font-bold">View:</span>
+                            <button onClick={() => setFieldMode('full')} className={`px-1 py-0.5 rounded ${fieldMode === 'full' ? 'bg-emerald-600 font-bold' : 'bg-slate-700'}`}>Full</button>
+                            <button onClick={() => setFieldMode('half')} className={`px-1 py-0.5 rounded ${fieldMode === 'half' ? 'bg-emerald-600 font-bold' : 'bg-slate-700'}`}>Half</button>
+                            <button onClick={() => setFieldMode('third')} className={`px-1 py-0.5 rounded ${fieldMode === 'third' ? 'bg-emerald-600 font-bold' : 'bg-slate-700'}`}>Third</button>
+                            <span className="text-slate-400 font-bold ml-1">Formations:</span>
+                            <button onClick={() => addFormationPreset('4-3-3')} className="bg-indigo-600 text-white px-1.5 py-0.5 rounded font-bold">4-3-3</button>
+                            <button onClick={() => addFormationPreset('4-4-2')} className="bg-indigo-600 text-white px-1.5 py-0.5 rounded font-bold">4-4-2</button>
+                        </div>
+                        <div className="flex gap-2 items-center">
+                            <button onClick={() => setSnapGrid(!snapGrid)} className={`px-1.5 py-0.5 rounded ${snapGrid ? 'bg-blue-600 font-bold' : 'bg-slate-700'}`}>Grid: {snapGrid ? 'On' : 'Off'}</button>
+                            <button onClick={rotateSelectedGoal} className="bg-slate-700 px-1.5 py-0.5 rounded text-amber-300">Rotate Goal ↻</button>
+                        </div>
+                    </div>
+
+                    <canvas 
+                        ref={canvasRef}
+                        width={280}
+                        height={170}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onTouchStart={handleTouchStart}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
+                        className="border border-slate-600 rounded cursor-crosshair bg-emerald-800 shadow-inner w-full max-w-[280px] h-[150px] touch-none"
+                    />
+                </div>
+            );
+        }
+
+        function App() {
+            const [viewMode, setViewMode] = React.useState('session'); // 'session', 'microcycle', 'drillbank'
+            const [collapsed, setCollapsed] = React.useState({ 1: false, 2: false, 3: false, 4: false });
+
+            const [sessionData, setSessionData] = React.useState(() => {
+                const saved = localStorage.getItem('pro_soccer_session_v10');
+                return saved ? JSON.parse(saved) : {
+                    manageOneself: '', manageSpace: '', manageTheBall: '',
+                    team: '', date: '', sessionTime: '', totalSpace: '', load: 'Moderate', sessionDuration: '90m',
+                    act1Title: 'Activity 1: Warm-up / Rondo', act1Duration: '', act1SetsReps: '', act1Explanation: '', act1CoachingPoints: '', act1Progression: '', act1Canvas: [],
+                    act2Title: 'Activity 2: Positional Play', act2Duration: '', act2SetsReps: '', act2Explanation: '', act2CoachingPoints: '', act2Progression: '', act2Canvas: [],
+                    act3Title: 'Activity 3: Tactical Phase', act3Duration: '', act3SetsReps: '', act3Explanation: '', act3CoachingPoints: '', act3Progression: '', act3Canvas: [],
+                    act4Title: 'Activity 4: Conditioned Game', act4Duration: '', act4SetsReps: '', act4Explanation: '', act4CoachingPoints: '', act4Progression: '', act4Canvas: []
+                };
+            });
+
+            const [microcycle, setMicrocycle] = React.useState(() => {
+                const saved = localStorage.getItem('pro_soccer_micro_v10');
+                return saved ? JSON.parse(saved) : [
+                    { day: 'Monday', focus: 'Recovery / Activation', load: 'Low' },
+                    { day: 'Tuesday', focus: 'Strength / Build-up Phase', load: 'High' },
+                    { day: 'Wednesday', focus: 'Endurance / Positional Play', load: 'High' },
+                    { day: 'Thursday', focus: 'Tactical Integration / Transition', load: 'Moderate' },
+                    { day: 'Friday', focus: 'Match Prep / Sharpness', load: 'Low' },
+                    { day: 'Saturday', focus: 'MATCH DAY', load: 'Max' },
+                    { day: 'Sunday', focus: 'Complete Rest', load: 'None' }
+                ];
+            });
+
+            const [drillBank, setDrillBank] = React.useState(() => {
+                const saved = localStorage.getItem('pro_soccer_drills_v10');
+                return saved ? JSON.parse(saved) : [];
+            });
+
+            React.useEffect(() => {
+                localStorage.setItem('pro_soccer_session_v10', JSON.stringify(sessionData));
+            }, [sessionData]);
+
+            React.useEffect(() => {
+                localStorage.setItem('pro_soccer_micro_v10', JSON.stringify(microcycle));
+            }, [microcycle]);
+
+            React.useEffect(() => {
+                localStorage.setItem('pro_soccer_drills_v10', JSON.stringify(drillBank));
+            }, [drillBank]);
+
+            const handleChange = (e) => {
+                setSessionData({ ...sessionData, [e.target.name]: e.target.value });
+            };
+
+            const toggleCollapse = (num) => {
+                setCollapsed({ ...collapsed, [num]: !collapsed[num] });
+            };
+
+            const saveActivityToDrillBank = (num) => {
+                const newDrill = {
+                    id: Date.now(),
+                    title: sessionData[`act${num}Title`],
+                    explanation: sessionData[`act${num}Explanation`],
+                    coachingPoints: sessionData[`act${num}CoachingPoints`],
+                    canvas: sessionData[`act${num}Canvas`]
+                };
+                setDrillBank([...drillBank, newDrill]);
+                alert(`Saved "${newDrill.title}" to your Drill Bank!`);
+            };
+
+            const loadDrillIntoActivity = (drill, targetNum) => {
+                setSessionData({
+                    ...sessionData,
+                    [`act${targetNum}Title`]: drill.title,
+                    [`act${targetNum}Explanation`]: drill.explanation,
+                    [`act${targetNum}CoachingPoints`]: drill.coachingPoints,
+                    [`act${targetNum}Canvas`]: drill.canvas
+                });
+                setViewMode('session');
+                alert(`Loaded drill into Activity ${targetNum}!`);
+            };
+
+            return (
+                <div className="max-w-5xl mx-auto p-4 sm:p-6">
+                    <div className="flex flex-wrap justify-between items-center mb-6 bg-white p-4 rounded shadow print:hidden gap-3">
+                        <div>
+                            <h1 className="font-black tracking-wider uppercase text-emerald-800 text-lg">Pro Session Planner & Club Suite</h1>
+                            <p className="text-xs text-slate-500">Periodized training sheets, drill library, and 7-day micro-cycle planner.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 items-center">
+                            <button onClick={() => setViewMode('session')} className={`px-3 py-2 rounded text-xs font-bold transition ${viewMode === 'session' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Session Sheet</button>
+                            <button onClick={() => setViewMode('microcycle')} className={`px-3 py-2 rounded text-xs font-bold transition ${viewMode === 'microcycle' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}>7-Day Microcycle</button>
+                            <button onClick={() => setViewMode('drillbank')} className={`px-3 py-2 rounded text-xs font-bold transition ${viewMode === 'drillbank' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Drill Bank ({drillBank.length})</button>
+                            <button onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2 rounded text-xs transition shadow">Print / PDF</button>
+                        </div>
+                    </div>
+
+                    {viewMode === 'session' && (
+                        <div className="bg-white border-2 border-slate-800 shadow-2xl p-4 sm:p-6 print:shadow-none print:border-none print:p-0">
+                            <div className="grid grid-cols-3 border border-slate-800 bg-red-900 text-white text-xs mb-3 text-center font-bold">
+                                <div className="p-2 border-r border-slate-700 flex flex-col">
+                                    <span className="block text-red-300 uppercase tracking-wider text-[10px] mb-1">Manage Oneself</span>
+                                    <input type="text" name="manageOneself" placeholder="Enter principles..." value={sessionData.manageOneself} onChange={handleChange} className="w-full bg-red-950 text-white text-center text-xs p-1 rounded border border-red-800 focus:outline-none placeholder-red-400" />
+                                </div>
+                                <div className="p-2 border-r border-slate-700 flex flex-col">
+                                    <span className="block text-red-300 uppercase tracking-wider text-[10px] mb-1">Manage Space</span>
+                                    <input type="text" name="manageSpace" placeholder="Enter principles..." value={sessionData.manageSpace} onChange={handleChange} className="w-full bg-red-950 text-white text-center text-xs p-1 rounded border border-red-800 focus:outline-none placeholder-red-400" />
+                                </div>
+                                <div className="p-2 flex flex-col">
+                                    <span className="block text-red-300 uppercase tracking-wider text-[10px] mb-1">Manage The Ball</span>
+                                    <input type="text" name="manageTheBall" placeholder="Enter principles..." value={sessionData.manageTheBall} onChange={handleChange} className="w-full bg-red-950 text-white text-center text-xs p-1 rounded border border-red-800 focus:outline-none placeholder-red-400" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-6 gap-1 mb-4 text-xs">
+                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">TEAM</span><input type="text" name="team" placeholder="Type team..." value={sessionData.team} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none" /></div>
+                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">DATE</span><input type="date" name="date" value={sessionData.date} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none text-[11px]" /></div>
+                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">SESSION TIME</span><input type="text" name="sessionTime" placeholder="16:00" value={sessionData.sessionTime} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none" /></div>
+                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">TOTAL SPACE</span><input type="text" name="totalSpace" placeholder="Type space..." value={sessionData.totalSpace} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none" /></div>
+                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">LOAD</span>
+                                    <select name="load" value={sessionData.load} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none text-[11px]">
+                                        <option value="Low">Low</option>
+                                        <option value="Moderate">Moderate</option>
+                                        <option value="High">High</option>
+                                        <option value="Max">Max</option>
+                                    </select>
+                                </div>
+                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">DURATION</span><input type="text" name="sessionDuration" placeholder="90m" value={sessionData.sessionDuration} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none" /></div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {[1, 2, 3, 4].map((num) => {
+                                    const titleKey = `act${num}Title`;
+                                    const durKey = `act${num}Duration`;
+                                    const setsKey = `act${num}SetsReps`;
+                                    const expKey = `act${num}Explanation`;
+                                    const cpKey = `act${num}CoachingPoints`;
+                                    const progKey = `act${num}Progression`;
+                                    const canvasKey = `act${num}Canvas`;
+
+                                    return (
+                                        <div key={num} className="border-2 border-slate-700 bg-slate-50 flex flex-col">
+                                            <div className="bg-slate-800 text-white p-2 font-bold text-sm flex justify-between items-center flex-wrap gap-1">
+                                                <input type="text" name={titleKey} value={sessionData[titleKey]} onChange={handleChange} className="bg-transparent text-white font-bold w-1/2 focus:outline-none border-b border-slate-600 text-xs" />
+                                                <div className="flex gap-2 items-center text-[10px] font-normal flex-wrap">
+                                                    <span>Dur: <input type="text" name={durKey} placeholder="15m" value={sessionData[durKey]} onChange={handleChange} className="bg-slate-700 px-1 rounded w-10 text-white text-center focus:outline-none" /></span>
+                                                    <span>Sets: <input type="text" name={setsKey} placeholder="3x4m" value={sessionData[setsKey]} onChange={handleChange} className="bg-slate-700 px-1 rounded w-12 text-white text-center focus:outline-none" /></span>
+                                                    <button onClick={() => saveActivityToDrillBank(num)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-1.5 py-0.5 rounded text-[9px] print:hidden">Save</button>
+                                                    <button onClick={() => toggleCollapse(num)} className="bg-slate-700 hover:bg-slate-600 px-1.5 py-0.5 rounded text-[9px] print:hidden">{collapsed[num] ? 'Expand +' : 'Collapse -'}</button>
+                                                </div>
+                                            </div>
+
+                                            {!collapsed[num] && (
+                                                <div className="p-2 text-xs flex flex-col gap-2 flex-grow">
+                                                    <div className="flex flex-col sm:flex-row gap-2">
+                                                        <div className="w-full sm:w-1/2 space-y-2">
+                                                            <div>
+                                                                <label className="block font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Organization</label>
+                                                                <textarea name={expKey} placeholder="Type explanation..." value={sessionData[expKey]} onChange={handleChange} className="w-full border border-slate-300 p-1.5 rounded h-16 bg-white focus:outline-none text-[10px]"></textarea>
+                                                            </div>
+                                                            <div>
+                                                                <label className="block font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Coaching Points</label>
+                                                                <textarea name={cpKey} placeholder="Type coaching points..." value={sessionData[cpKey]} onChange={handleChange} className="w-full border border-slate-300 p-1.5 rounded h-16 bg-white focus:outline-none text-[10px]"></textarea>
+                                                            </div>
+                                                            <div>
+                                                                <label className="block font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Progression</label>
+                                                                <input type="text" name={progKey} placeholder="Type progression..." value={sessionData[progKey]} onChange={handleChange} className="w-full border border-slate-300 p-1.5 rounded bg-white focus:outline-none text-[10px]" />
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div className="w-full sm:w-1/2 border border-slate-300 bg-white p-1 rounded relative flex flex-col items-center">
+                                                            <span className="text-[9px] font-bold text-slate-600 uppercase mb-1 self-start">Tactical Pitch Creator</span>
+                                                            <TacticalSketchpad 
+                                                                initialData={sessionData[canvasKey]} 
+                                                                onSave={(data) => {
+                                                                    setSessionData(prev => ({ ...prev, [canvasKey]: data }));
+                                                                }} 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {viewMode === 'microcycle' && (
+                        <div className="bg-white border-2 border-slate-800 shadow-xl p-6 rounded">
+                            <h2 className="text-lg font-black uppercase text-emerald-800 mb-2">7-Day Tactical & Physical Microcycle</h2>
+                            <p className="text-xs text-slate-500 mb-4">Map out weekly periodization, training loads, and objectives.</p>
+                            <div className="space-y-3">
+                                {microcycle.map((dayObj, index) => (
+                                    <div key={index} className="flex flex-col sm:flex-row items-center gap-3 border border-slate-300 p-3 rounded bg-slate-50">
+                                        <div className="w-32 font-bold text-slate-800 text-sm">{dayObj.day}</div>
+                                        <input type="text" value={dayObj.focus} onChange={(e) => {
+                                            const updated = [...microcycle];
+                                            updated[index].focus = e.target.value;
+                                            setMicrocycle(updated);
+                                        }} placeholder="Session Focus..." className="flex-grow border border-slate-300 p-1.5 rounded text-xs bg-white w-full" />
+                                        <select value={dayObj.load} onChange={(e) => {
+                                            const updated = [...microcycle];
+                                            updated[index].load = e.target.value;
+                                            setMicrocycle(updated);
+                                        }} className="border border-slate-300 p-1.5 rounded text-xs bg-white font-bold w-full sm:w-auto">
+                                            <option value="None">None</option>
+                                            <option value="Low">Low Load</option>
+                                            <option value="Moderate">Moderate Load</option>
+                                            <option value="High">High Load</option>
+                                            <option value="Max">Max / Match</option>
+                                        </select>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {viewMode === 'drillbank' && (
+                        <div className="bg-white border-2 border-slate-800 shadow-xl p-6 rounded">
+                            <h2 className="text-lg font-black uppercase text-emerald-800 mb-2">Saved Drill Bank</h2>
+                            <p className="text-xs text-slate-500 mb-4">Quickly reload your favorite exercises and tactical setups into any active session sheet.</p>
+                            {drillBank.length === 0 ? (
+                                <p className="text-sm text-slate-500 italic">No drills saved yet. Click the "Save" button on any session activity card to add it to your bank.</p>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {drillBank.map((drill) => (
+                                        <div key={drill.id} className="border border-slate-300 rounded p-4 bg-slate-50 flex flex-col justify-between">
+                                            <div>
+                                                <h3 className="font-bold text-slate-800 text-sm mb-1">{drill.title}</h3>
+                                                <p className="text-xs text-slate-600 mb-2"><strong>Org:</strong> {drill.explanation || 'No description'}</p>
+                                                <p className="text-xs text-slate-600 mb-3"><strong>Key Points:</strong> {drill.coachingPoints || 'None'}</p>
+                                            </div>
+                                            <div className="flex gap-2 mt-2 flex-wrap items-center">
+                                                <span className="text-[10px] text-slate-400">Load into:</span>
+                                                <button onClick={() => loadDrillIntoActivity(drill, 1)} className="bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded text-[10px] font-bold">Act 1</button>
+                                                <button onClick={() => loadDrillIntoActivity(drill, 2)} className="bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded text-[10px] font-bold">Act 2</button>
+                                                <button onClick={() => loadDrillIntoActivity(drill, 3)} className="bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded text-[10px] font-bold">Act 3</button>
+                                                <button onClick={() => loadDrillIntoActivity(drill, 4)} className="bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded text-[10px] font-bold">Act 4</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
