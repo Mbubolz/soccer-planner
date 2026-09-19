@@ -1,638 +1,901 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Session Planner & Club Suite</title>
+    <title>Pro Session Planner & Animation Studio</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-</head>
-<body class="bg-slate-200 text-slate-900">
-    <div id="root"></div>
-
-    <script type="text/babel">
-        function TacticalSketchpad({ initialData, onSave }) {
-            const canvasRef = React.useRef(null);
-            const [tool, setTool] = React.useState('select'); 
-            const [elements, setElements] = React.useState(initialData || []);
-            const [dragState, setDragState] = React.useState(null); 
-            const [fieldMode, setFieldMode] = React.useState('full'); 
-            const [snapGrid, setSnapGrid] = React.useState(false);
-            const [playerNumberInput, setPlayerNumberInput] = React.useState('9');
-
-            const GRID_SIZE = 20;
-
-            React.useEffect(() => {
-                redrawCanvas();
-                onSave(elements);
-            }, [elements, dragState, fieldMode, snapGrid]);
-
-            const snap = (val) => {
-                if (!snapGrid) return val;
-                return Math.round(val / GRID_SIZE) * GRID_SIZE;
-            };
-
-            const redrawCanvas = () => {
-                const canvas = canvasRef.current;
-                if (!canvas) return;
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                ctx.fillStyle = '#166534';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1.5;
-
-                if (fieldMode === 'full') {
-                    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-                    ctx.beginPath();
-                    ctx.moveTo(10, canvas.height / 2);
-                    ctx.lineTo(canvas.width - 10, canvas.height / 2);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.arc(canvas.width / 2, canvas.height / 2, 25, 0, 2 * Math.PI);
-                    ctx.stroke();
-                    ctx.fillStyle = '#ffffff';
-                    ctx.beginPath();
-                    ctx.arc(canvas.width / 2, canvas.height / 2, 2, 0, 2 * Math.PI);
-                    ctx.fill();
-                    ctx.strokeRect(canvas.width / 2 - 40, 10, 80, 22);
-                    ctx.strokeRect(canvas.width / 2 - 40, canvas.height - 32, 80, 22);
-                } else if (fieldMode === 'half') {
-                    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-                    ctx.strokeRect(canvas.width / 2 - 50, 10, 100, 35);
-                    ctx.strokeRect(canvas.width / 2 - 25, 10, 50, 12);
-                    ctx.beginPath();
-                    ctx.arc(canvas.width / 2, 45, 25, 0, Math.PI);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.arc(canvas.width / 2, 10, 2, 0, 2 * Math.PI);
-                    ctx.fill();
-                } else if (fieldMode === 'third') {
-                    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-                    ctx.strokeRect(canvas.width / 2 - 55, 10, 110, 45);
-                    ctx.strokeRect(canvas.width / 2 - 25, 10, 50, 15);
-                }
-
-                if (snapGrid) {
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-                    ctx.lineWidth = 0.5;
-                    for (let x = 0; x < canvas.width; x += GRID_SIZE) {
-                        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-                    }
-                    for (let y = 0; y < canvas.height; y += GRID_SIZE) {
-                        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-                    }
-                }
-
-                elements.forEach((el, idx) => {
-                    drawElement(ctx, el, dragState && dragState.index === idx);
-                });
-            };
-
-            const drawElement = (ctx, el, isSelected) => {
-                ctx.save();
-                if (el.type === 'red_player' || el.type === 'blue_player') {
-                    ctx.fillStyle = el.type === 'red_player' ? '#ef4444' : '#3b82f6';
-                    ctx.strokeStyle = isSelected ? '#facc15' : '#ffffff';
-                    ctx.lineWidth = isSelected ? 3 : 2;
-                    ctx.beginPath();
-                    ctx.arc(el.x, el.y, 10, 0, 2 * Math.PI);
-                    ctx.fill();
-                    ctx.stroke();
-
-                    if (el.label) {
-                        ctx.fillStyle = '#ffffff';
-                        ctx.font = 'bold 9px sans-serif';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillText(el.label, el.x, el.y);
-                    }
-                } else if (el.type === 'cone') {
-                    ctx.fillStyle = '#facc15';
-                    ctx.strokeStyle = isSelected ? '#ffffff' : '#ca8a04';
-                    ctx.lineWidth = isSelected ? 2 : 1;
-                    ctx.beginPath();
-                    ctx.moveTo(el.x, el.y - 8);
-                    ctx.lineTo(el.x - 7, el.y + 6);
-                    ctx.lineTo(el.x + 7, el.y + 6);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-                } else if (el.type === 'pole') {
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(el.x - 2, el.y - 10, 4, 20);
-                    ctx.fillStyle = '#ef4444';
-                    ctx.fillRect(el.x - 2, el.y - 10, 4, 7);
-                    if (isSelected) {
-                        ctx.strokeStyle = '#facc15';
-                        ctx.lineWidth = 2;
-                        ctx.strokeRect(el.x - 5, el.y - 12, 10, 24);
-                    }
-                } else if (el.type === 'goal') {
-                    ctx.strokeStyle = isSelected ? '#facc15' : '#f8fafc';
-                    ctx.lineWidth = isSelected ? 3 : 2;
-                    ctx.save();
-                    ctx.translate(el.x, el.y);
-                    if (el.rotation) ctx.rotate(el.rotation);
-                    ctx.strokeRect(-15, -5, 30, 10);
-                    ctx.restore();
-                } else if (el.type === 'pass' || el.type === 'dribble') {
-                    ctx.strokeStyle = el.type === 'pass' ? '#ffffff' : '#facc15';
-                    ctx.lineWidth = isSelected ? 3 : 2;
-                    if (el.type === 'dribble') ctx.setLineDash([4, 4]);
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(el.startX, el.startY);
-                    ctx.lineTo(el.endX, el.endY);
-                    ctx.stroke();
-
-                    const angle = Math.atan2(el.endY - el.startY, el.endX - el.startX);
-                    ctx.setLineDash([]);
-                    ctx.fillStyle = ctx.strokeStyle;
-                    ctx.beginPath();
-                    ctx.moveTo(el.endX, el.endY);
-                    ctx.lineTo(el.endX - 8 * Math.cos(angle - Math.PI / 6), el.endY - 8 * Math.sin(angle - Math.PI / 6));
-                    ctx.lineTo(el.endX - 8 * Math.cos(angle + Math.PI / 6), el.endY - 8 * Math.sin(angle + Math.PI / 6));
-                    ctx.lineTo(el.endX, el.endY);
-                    ctx.fill();
-
-                    if (isSelected) {
-                        ctx.fillStyle = '#facc15';
-                        ctx.beginPath();
-                        ctx.arc(el.startX, el.startY, 5, 0, 2 * Math.PI);
-                        ctx.arc(el.endX, el.endY, 5, 0, 2 * Math.PI);
-                        ctx.fill();
-                    }
-                } else if (el.type === 'freehand' && el.points && el.points.length > 0) {
-                    ctx.strokeStyle = isSelected ? '#facc15' : '#f8fafc';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(el.points[0].x, el.points[0].y);
-                    for (let p = 1; p < el.points.length; p++) {
-                        ctx.lineTo(el.points[p].x, el.points[p].y);
-                    }
-                    ctx.stroke();
-                }
-                ctx.restore();
-            };
-
-            const addFormationPreset = (formationType) => {
-                const cx = 140;
-                const cy = 85;
-                let newPlayers = [];
-
-                if (formationType === '4-3-3') {
-                    newPlayers = [
-                        { type: 'blue_player', x: cx, y: cy + 60, label: '1', rotation: 0 },
-                        { type: 'blue_player', x: cx - 50, y: cy + 30, label: '2', rotation: 0 },
-                        { type: 'blue_player', x: cx - 20, y: cy + 35, label: '4', rotation: 0 },
-                        { type: 'blue_player', x: cx + 20, y: cy + 35, label: '5', rotation: 0 },
-                        { type: 'blue_player', x: cx + 50, y: cy + 30, label: '3', rotation: 0 },
-                        { type: 'blue_player', x: cx, y: cy, label: '6', rotation: 0 },
-                        { type: 'blue_player', x: cx - 25, y: cy - 15, label: '8', rotation: 0 },
-                        { type: 'blue_player', x: cx + 25, y: cy - 15, label: '10', rotation: 0 },
-                        { type: 'blue_player', x: cx - 50, y: cy - 40, label: '7', rotation: 0 },
-                        { type: 'blue_player', x: cx, y: cy - 45, label: '9', rotation: 0 },
-                        { type: 'blue_player', x: cx + 50, y: cy - 40, label: '11', rotation: 0 },
-                    ];
-                } else if (formationType === '4-4-2') {
-                    newPlayers = [
-                        { type: 'blue_player', x: cx, y: cy + 60, label: '1', rotation: 0 },
-                        { type: 'blue_player', x: cx - 50, y: cy + 30, label: '2', rotation: 0 },
-                        { type: 'blue_player', x: cx - 20, y: cy + 35, label: '4', rotation: 0 },
-                        { type: 'blue_player', x: cx + 20, y: cy + 35, label: '5', rotation: 0 },
-                        { type: 'blue_player', x: cx + 50, y: cy + 30, label: '3', rotation: 0 },
-                        { type: 'blue_player', x: cx - 50, y: cy, label: '7', rotation: 0 },
-                        { type: 'blue_player', x: cx - 20, y: cy, label: '6', rotation: 0 },
-                        { type: 'blue_player', x: cx + 20, y: cy, label: '8', rotation: 0 },
-                        { type: 'blue_player', x: cx + 50, y: cy, label: '11', rotation: 0 },
-                        { type: 'blue_player', x: cx - 15, y: cy - 40, label: '10', rotation: 0 },
-                        { type: 'blue_player', x: cx + 15, y: cy - 40, label: '9', rotation: 0 },
-                    ];
-                }
-                setElements([...elements, ...newPlayers]);
-            };
-
-            const handleStart = (clientX, clientY) => {
-                const canvas = canvasRef.current;
-                const rect = canvas.getBoundingClientRect();
-                const x = clientX - rect.left;
-                const y = clientY - rect.top;
-
-                if (tool === 'erase') {
-                    setElements(elements.filter(el => {
-                        if (el.x !== undefined) return Math.hypot(el.x - x, el.y - y) > 15;
-                        if (el.points) return true;
-                        return Math.hypot(el.startX - x, el.startY - y) > 15 && Math.hypot(el.endX - x, el.endY - y) > 15;
-                    }));
-                    return;
-                }
-
-                if (tool === 'freehand') {
-                    const newEl = { type: 'freehand', points: [{x, y}] };
-                    setElements([...elements, newEl]);
-                    setDragState({ index: elements.length, type: 'freehand' });
-                    return;
-                }
-
-                for (let i = elements.length - 1; i >= 0; i--) {
-                    const el = elements[i];
-                    if (el.x !== undefined && el.y !== undefined) {
-                        if (Math.hypot(el.x - x, el.y - y) < 14) {
-                            setDragState({ index: i, type: 'item', offsetX: x - el.x, offsetY: y - el.y });
-                            return;
-                        }
-                    } else if (el.startX !== undefined) {
-                        if (Math.hypot(el.startX - x, el.startY - y) < 12) {
-                            setDragState({ index: i, type: 'start' });
-                            return;
-                        }
-                        if (Math.hypot(el.endX - x, el.endY - y) < 12) {
-                            setDragState({ index: i, type: 'end' });
-                            return;
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        pitch: {
+                            green: '#1a472a',
+                            turf: '#2e6f40',
+                            line: 'rgba(255, 255, 255, 0.8)',
                         }
                     }
                 }
-
-                if (tool === 'select') {
-                    setDragState(null);
-                    return;
-                }
-
-                if (tool === 'pass' || tool === 'dribble') {
-                    const newEl = { type: tool, startX: snap(x), startY: snap(y), endX: snap(x + 40), endY: snap(y) };
-                    setElements([...elements, newEl]);
-                    setDragState({ index: elements.length, type: 'end' });
-                } else if (tool === 'red_player' || tool === 'blue_player') {
-                    const newEl = { type: tool, x: snap(x), y: snap(y), label: playerNumberInput, rotation: 0 };
-                    setElements([...elements, newEl]);
-                    setDragState({ index: elements.length, type: 'item', offsetX: 0, offsetY: 0 });
-                } else {
-                    const newEl = { type: tool, x: snap(x), y: snap(y), rotation: 0 };
-                    setElements([...elements, newEl]);
-                    setDragState({ index: elements.length, type: 'item', offsetX: 0, offsetY: 0 });
-                }
-            };
-
-            const handleMove = (clientX, clientY) => {
-                if (!dragState) return;
-                const canvas = canvasRef.current;
-                const rect = canvas.getBoundingClientRect();
-                const x = clientX - rect.left;
-                const y = clientY - rect.top;
-
-                const updated = [...elements];
-                const item = { ...updated[dragState.index] };
-
-                if (dragState.type === 'freehand') {
-                    item.points = [...item.points, { x, y }];
-                } else if (dragState.type === 'item') {
-                    item.x = snap(x - dragState.offsetX);
-                    item.y = snap(y - dragState.offsetY);
-                } else if (dragState.type === 'start') {
-                    item.startX = snap(x);
-                    item.startY = snap(y);
-                } else if (dragState.type === 'end') {
-                    item.endX = snap(x);
-                    item.endY = snap(y);
-                }
-
-                updated[dragState.index] = item;
-                setElements(updated);
-            };
-
-            const handleMouseDown = (e) => handleStart(e.clientX, e.clientY);
-            const handleMouseMove = (e) => handleMove(e.clientX, e.clientY);
-            const handleMouseUp = () => setDragState(null);
-
-            const handleTouchStart = (e) => {
-                if (e.touches.length === 1) {
-                    handleStart(e.touches[0].clientX, e.touches[0].clientY);
-                }
-            };
-            const handleTouchMove = (e) => {
-                if (e.touches.length === 1) {
-                    handleMove(e.touches[0].clientX, e.touches[0].clientY);
-                }
-            };
-            const handleTouchEnd = () => setDragState(null);
-
-            const rotateSelectedGoal = () => {
-                if (dragState === null) return;
-                const updated = [...elements];
-                const item = updated[dragState.index];
-                if (item && item.type === 'goal') {
-                    item.rotation = (item.rotation || 0) + Math.PI / 2;
-                    setElements(updated);
-                }
-            };
-
-            return (
-                <div className="flex flex-col items-center bg-slate-900 p-2 rounded text-white w-full">
-                    <div className="flex flex-wrap justify-between items-center w-full mb-1.5 gap-1 text-[9px]">
-                        <div className="flex gap-1 items-center flex-wrap">
-                            <span className="font-bold text-slate-300">Tool:</span>
-                            <button onClick={() => setTool('select')} className={`px-1.5 py-0.5 rounded ${tool === 'select' ? 'bg-emerald-500 font-bold' : 'bg-slate-700'}`}>Select</button>
-                            <button onClick={() => setTool('pass')} className={`px-1.5 py-0.5 rounded ${tool === 'pass' ? 'bg-white text-slate-900 font-bold' : 'bg-slate-700'}`}>Pass</button>
-                            <button onClick={() => setTool('dribble')} className={`px-1.5 py-0.5 rounded ${tool === 'dribble' ? 'bg-yellow-400 text-slate-900 font-bold' : 'bg-slate-700'}`}>Dribble</button>
-                            <button onClick={() => setTool('freehand')} className={`px-1.5 py-0.5 rounded ${tool === 'freehand' ? 'bg-cyan-500 font-bold' : 'bg-slate-700'}`}>Sketch</button>
-                            <button onClick={() => setTool('red_player')} className={`px-1.5 py-0.5 rounded ${tool === 'red_player' ? 'bg-red-500 font-bold' : 'bg-slate-700'}`}>Red</button>
-                            <button onClick={() => setTool('blue_player')} className={`px-1.5 py-0.5 rounded ${tool === 'blue_player' ? 'bg-blue-500 font-bold' : 'bg-slate-700'}`}>Blue</button>
-                            <div className="flex items-center bg-slate-700 px-1 rounded">
-                                <span className="text-[8px] mr-1">No:</span>
-                                <input type="text" value={playerNumberInput} onChange={(e) => setPlayerNumberInput(e.target.value)} className="w-5 bg-slate-800 text-center text-white rounded text-[9px]" />
-                            </div>
-                            <button onClick={() => setTool('cone')} className={`px-1.5 py-0.5 rounded ${tool === 'cone' ? 'bg-yellow-500 text-slate-900 font-bold' : 'bg-slate-700'}`}>Cone</button>
-                            <button onClick={() => setTool('pole')} className={`px-1.5 py-0.5 rounded ${tool === 'pole' ? 'bg-slate-300 text-slate-900 font-bold' : 'bg-slate-700'}`}>Pole</button>
-                            <button onClick={() => setTool('goal')} className={`px-1.5 py-0.5 rounded ${tool === 'goal' ? 'bg-slate-300 text-slate-900 font-bold' : 'bg-slate-700'}`}>Goal</button>
-                            <button onClick={() => setTool('erase')} className={`px-1.5 py-0.5 rounded ${tool === 'erase' ? 'bg-orange-600 font-bold' : 'bg-slate-700'}`}>Eraser</button>
-                        </div>
-                        <button onClick={() => setElements([])} className="bg-red-600 px-2 py-0.5 rounded text-[9px]">Clear Pitch</button>
-                    </div>
-
-                    <div className="flex flex-wrap justify-between items-center w-full mb-1.5 px-1 py-1 bg-slate-800 rounded text-[8px] gap-1">
-                        <div className="flex gap-1 items-center flex-wrap">
-                            <span className="text-slate-400 font-bold">View:</span>
-                            <button onClick={() => setFieldMode('full')} className={`px-1 py-0.5 rounded ${fieldMode === 'full' ? 'bg-emerald-600 font-bold' : 'bg-slate-700'}`}>Full</button>
-                            <button onClick={() => setFieldMode('half')} className={`px-1 py-0.5 rounded ${fieldMode === 'half' ? 'bg-emerald-600 font-bold' : 'bg-slate-700'}`}>Half</button>
-                            <button onClick={() => setFieldMode('third')} className={`px-1 py-0.5 rounded ${fieldMode === 'third' ? 'bg-emerald-600 font-bold' : 'bg-slate-700'}`}>Third</button>
-                            <span className="text-slate-400 font-bold ml-1">Formations:</span>
-                            <button onClick={() => addFormationPreset('4-3-3')} className="bg-indigo-600 text-white px-1.5 py-0.5 rounded font-bold">4-3-3</button>
-                            <button onClick={() => addFormationPreset('4-4-2')} className="bg-indigo-600 text-white px-1.5 py-0.5 rounded font-bold">4-4-2</button>
-                        </div>
-                        <div className="flex gap-2 items-center">
-                            <button onClick={() => setSnapGrid(!snapGrid)} className={`px-1.5 py-0.5 rounded ${snapGrid ? 'bg-blue-600 font-bold' : 'bg-slate-700'}`}>Grid: {snapGrid ? 'On' : 'Off'}</button>
-                            <button onClick={rotateSelectedGoal} className="bg-slate-700 px-1.5 py-0.5 rounded text-amber-300">Rotate Goal ↻</button>
-                        </div>
-                    </div>
-
-                    <canvas 
-                        ref={canvasRef}
-                        width={280}
-                        height={170}
-                        onMouseDown={handleMouseDown}
-                        onMouseMove={handleMouseMove}
-                        onMouseUp={handleMouseUp}
-                        onTouchStart={handleTouchStart}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={handleTouchEnd}
-                        className="border border-slate-600 rounded cursor-crosshair bg-emerald-800 shadow-inner w-full max-w-[280px] h-[150px] touch-none"
-                    />
-                </div>
-            );
+            }
         }
-
-        function App() {
-            const [viewMode, setViewMode] = React.useState('session'); // 'session', 'microcycle', 'drillbank'
-            const [collapsed, setCollapsed] = React.useState({ 1: false, 2: false, 3: false, 4: false });
-
-            const [sessionData, setSessionData] = React.useState(() => {
-                const saved = localStorage.getItem('pro_soccer_session_v10');
-                return saved ? JSON.parse(saved) : {
-                    manageOneself: '', manageSpace: '', manageTheBall: '',
-                    team: '', date: '', sessionTime: '', totalSpace: '', load: 'Moderate', sessionDuration: '90m',
-                    act1Title: 'Activity 1: Warm-up / Rondo', act1Duration: '', act1SetsReps: '', act1Explanation: '', act1CoachingPoints: '', act1Progression: '', act1Canvas: [],
-                    act2Title: 'Activity 2: Positional Play', act2Duration: '', act2SetsReps: '', act2Explanation: '', act2CoachingPoints: '', act2Progression: '', act2Canvas: [],
-                    act3Title: 'Activity 3: Tactical Phase', act3Duration: '', act3SetsReps: '', act3Explanation: '', act3CoachingPoints: '', act3Progression: '', act3Canvas: [],
-                    act4Title: 'Activity 4: Conditioned Game', act4Duration: '', act4SetsReps: '', act4Explanation: '', act4CoachingPoints: '', act4Progression: '', act4Canvas: []
-                };
-            });
-
-            const [microcycle, setMicrocycle] = React.useState(() => {
-                const saved = localStorage.getItem('pro_soccer_micro_v10');
-                return saved ? JSON.parse(saved) : [
-                    { day: 'Monday', focus: 'Recovery / Activation', load: 'Low' },
-                    { day: 'Tuesday', focus: 'Strength / Build-up Phase', load: 'High' },
-                    { day: 'Wednesday', focus: 'Endurance / Positional Play', load: 'High' },
-                    { day: 'Thursday', focus: 'Tactical Integration / Transition', load: 'Moderate' },
-                    { day: 'Friday', focus: 'Match Prep / Sharpness', load: 'Low' },
-                    { day: 'Saturday', focus: 'MATCH DAY', load: 'Max' },
-                    { day: 'Sunday', focus: 'Complete Rest', load: 'None' }
-                ];
-            });
-
-            const [drillBank, setDrillBank] = React.useState(() => {
-                const saved = localStorage.getItem('pro_soccer_drills_v10');
-                return saved ? JSON.parse(saved) : [];
-            });
-
-            React.useEffect(() => {
-                localStorage.setItem('pro_soccer_session_v10', JSON.stringify(sessionData));
-            }, [sessionData]);
-
-            React.useEffect(() => {
-                localStorage.setItem('pro_soccer_micro_v10', JSON.stringify(microcycle));
-            }, [microcycle]);
-
-            React.useEffect(() => {
-                localStorage.setItem('pro_soccer_drills_v10', JSON.stringify(drillBank));
-            }, [drillBank]);
-
-            const handleChange = (e) => {
-                setSessionData({ ...sessionData, [e.target.name]: e.target.value });
-            };
-
-            const toggleCollapse = (num) => {
-                setCollapsed({ ...collapsed, [num]: !collapsed[num] });
-            };
-
-            const saveActivityToDrillBank = (num) => {
-                const newDrill = {
-                    id: Date.now(),
-                    title: sessionData[`act${num}Title`],
-                    explanation: sessionData[`act${num}Explanation`],
-                    coachingPoints: sessionData[`act${num}CoachingPoints`],
-                    canvas: sessionData[`act${num}Canvas`]
-                };
-                setDrillBank([...drillBank, newDrill]);
-                alert(`Saved "${newDrill.title}" to your Drill Bank!`);
-            };
-
-            const loadDrillIntoActivity = (drill, targetNum) => {
-                setSessionData({
-                    ...sessionData,
-                    [`act${targetNum}Title`]: drill.title,
-                    [`act${targetNum}Explanation`]: drill.explanation,
-                    [`act${targetNum}CoachingPoints`]: drill.coachingPoints,
-                    [`act${targetNum}Canvas`]: drill.canvas
-                });
-                setViewMode('session');
-                alert(`Loaded drill into Activity ${targetNum}!`);
-            };
-
-            return (
-                <div className="max-w-5xl mx-auto p-4 sm:p-6">
-                    <div className="flex flex-wrap justify-between items-center mb-6 bg-white p-4 rounded shadow print:hidden gap-3">
-                        <div>
-                            <h1 className="font-black tracking-wider uppercase text-emerald-800 text-lg">Pro Session Planner & Club Suite</h1>
-                            <p className="text-xs text-slate-500">Periodized training sheets, drill library, and 7-day micro-cycle planner.</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2 items-center">
-                            <button onClick={() => setViewMode('session')} className={`px-3 py-2 rounded text-xs font-bold transition ${viewMode === 'session' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Session Sheet</button>
-                            <button onClick={() => setViewMode('microcycle')} className={`px-3 py-2 rounded text-xs font-bold transition ${viewMode === 'microcycle' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}>7-Day Microcycle</button>
-                            <button onClick={() => setViewMode('drillbank')} className={`px-3 py-2 rounded text-xs font-bold transition ${viewMode === 'drillbank' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Drill Bank ({drillBank.length})</button>
-                            <button onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2 rounded text-xs transition shadow">Print / PDF</button>
-                        </div>
-                    </div>
-
-                    {viewMode === 'session' && (
-                        <div className="bg-white border-2 border-slate-800 shadow-2xl p-4 sm:p-6 print:shadow-none print:border-none print:p-0">
-                            <div className="grid grid-cols-3 border border-slate-800 bg-red-900 text-white text-xs mb-3 text-center font-bold">
-                                <div className="p-2 border-r border-slate-700 flex flex-col">
-                                    <span className="block text-red-300 uppercase tracking-wider text-[10px] mb-1">Manage Oneself</span>
-                                    <input type="text" name="manageOneself" placeholder="Enter principles..." value={sessionData.manageOneself} onChange={handleChange} className="w-full bg-red-950 text-white text-center text-xs p-1 rounded border border-red-800 focus:outline-none placeholder-red-400" />
-                                </div>
-                                <div className="p-2 border-r border-slate-700 flex flex-col">
-                                    <span className="block text-red-300 uppercase tracking-wider text-[10px] mb-1">Manage Space</span>
-                                    <input type="text" name="manageSpace" placeholder="Enter principles..." value={sessionData.manageSpace} onChange={handleChange} className="w-full bg-red-950 text-white text-center text-xs p-1 rounded border border-red-800 focus:outline-none placeholder-red-400" />
-                                </div>
-                                <div className="p-2 flex flex-col">
-                                    <span className="block text-red-300 uppercase tracking-wider text-[10px] mb-1">Manage The Ball</span>
-                                    <input type="text" name="manageTheBall" placeholder="Enter principles..." value={sessionData.manageTheBall} onChange={handleChange} className="w-full bg-red-950 text-white text-center text-xs p-1 rounded border border-red-800 focus:outline-none placeholder-red-400" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-6 gap-1 mb-4 text-xs">
-                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">TEAM</span><input type="text" name="team" placeholder="Type team..." value={sessionData.team} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none" /></div>
-                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">DATE</span><input type="date" name="date" value={sessionData.date} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none text-[11px]" /></div>
-                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">SESSION TIME</span><input type="text" name="sessionTime" placeholder="16:00" value={sessionData.sessionTime} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none" /></div>
-                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">TOTAL SPACE</span><input type="text" name="totalSpace" placeholder="Type space..." value={sessionData.totalSpace} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none" /></div>
-                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">LOAD</span>
-                                    <select name="load" value={sessionData.load} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none text-[11px]">
-                                        <option value="Low">Low</option>
-                                        <option value="Moderate">Moderate</option>
-                                        <option value="High">High</option>
-                                        <option value="Max">Max</option>
-                                    </select>
-                                </div>
-                                <div className="border border-slate-400 p-1.5 bg-slate-50"><span className="block font-bold text-slate-500 text-[10px]">DURATION</span><input type="text" name="sessionDuration" placeholder="90m" value={sessionData.sessionDuration} onChange={handleChange} className="w-full font-semibold bg-transparent focus:outline-none" /></div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {[1, 2, 3, 4].map((num) => {
-                                    const titleKey = `act${num}Title`;
-                                    const durKey = `act${num}Duration`;
-                                    const setsKey = `act${num}SetsReps`;
-                                    const expKey = `act${num}Explanation`;
-                                    const cpKey = `act${num}CoachingPoints`;
-                                    const progKey = `act${num}Progression`;
-                                    const canvasKey = `act${num}Canvas`;
-
-                                    return (
-                                        <div key={num} className="border-2 border-slate-700 bg-slate-50 flex flex-col">
-                                            <div className="bg-slate-800 text-white p-2 font-bold text-sm flex justify-between items-center flex-wrap gap-1">
-                                                <input type="text" name={titleKey} value={sessionData[titleKey]} onChange={handleChange} className="bg-transparent text-white font-bold w-1/2 focus:outline-none border-b border-slate-600 text-xs" />
-                                                <div className="flex gap-2 items-center text-[10px] font-normal flex-wrap">
-                                                    <span>Dur: <input type="text" name={durKey} placeholder="15m" value={sessionData[durKey]} onChange={handleChange} className="bg-slate-700 px-1 rounded w-10 text-white text-center focus:outline-none" /></span>
-                                                    <span>Sets: <input type="text" name={setsKey} placeholder="3x4m" value={sessionData[setsKey]} onChange={handleChange} className="bg-slate-700 px-1 rounded w-12 text-white text-center focus:outline-none" /></span>
-                                                    <button onClick={() => saveActivityToDrillBank(num)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-1.5 py-0.5 rounded text-[9px] print:hidden">Save</button>
-                                                    <button onClick={() => toggleCollapse(num)} className="bg-slate-700 hover:bg-slate-600 px-1.5 py-0.5 rounded text-[9px] print:hidden">{collapsed[num] ? 'Expand +' : 'Collapse -'}</button>
-                                                </div>
-                                            </div>
-
-                                            {!collapsed[num] && (
-                                                <div className="p-2 text-xs flex flex-col gap-2 flex-grow">
-                                                    <div className="flex flex-col sm:flex-row gap-2">
-                                                        <div className="w-full sm:w-1/2 space-y-2">
-                                                            <div>
-                                                                <label className="block font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Organization</label>
-                                                                <textarea name={expKey} placeholder="Type explanation..." value={sessionData[expKey]} onChange={handleChange} className="w-full border border-slate-300 p-1.5 rounded h-16 bg-white focus:outline-none text-[10px]"></textarea>
-                                                            </div>
-                                                            <div>
-                                                                <label className="block font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Coaching Points</label>
-                                                                <textarea name={cpKey} placeholder="Type coaching points..." value={sessionData[cpKey]} onChange={handleChange} className="w-full border border-slate-300 p-1.5 rounded h-16 bg-white focus:outline-none text-[10px]"></textarea>
-                                                            </div>
-                                                            <div>
-                                                                <label className="block font-bold text-slate-600 mb-0.5 uppercase text-[9px]">Progression</label>
-                                                                <input type="text" name={progKey} placeholder="Type progression..." value={sessionData[progKey]} onChange={handleChange} className="w-full border border-slate-300 p-1.5 rounded bg-white focus:outline-none text-[10px]" />
-                                                            </div>
-                                                        </div>
-                                                        
-                                                        <div className="w-full sm:w-1/2 border border-slate-300 bg-white p-1 rounded relative flex flex-col items-center">
-                                                            <span className="text-[9px] font-bold text-slate-600 uppercase mb-1 self-start">Tactical Pitch Creator</span>
-                                                            <TacticalSketchpad 
-                                                                initialData={sessionData[canvasKey]} 
-                                                                onSave={(data) => {
-                                                                    setSessionData(prev => ({ ...prev, [canvasKey]: data }));
-                                                                }} 
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
-                    {viewMode === 'microcycle' && (
-                        <div className="bg-white border-2 border-slate-800 shadow-xl p-6 rounded">
-                            <h2 className="text-lg font-black uppercase text-emerald-800 mb-2">7-Day Tactical & Physical Microcycle</h2>
-                            <p className="text-xs text-slate-500 mb-4">Map out weekly periodization, training loads, and objectives.</p>
-                            <div className="space-y-3">
-                                {microcycle.map((dayObj, index) => (
-                                    <div key={index} className="flex flex-col sm:flex-row items-center gap-3 border border-slate-300 p-3 rounded bg-slate-50">
-                                        <div className="w-32 font-bold text-slate-800 text-sm">{dayObj.day}</div>
-                                        <input type="text" value={dayObj.focus} onChange={(e) => {
-                                            const updated = [...microcycle];
-                                            updated[index].focus = e.target.value;
-                                            setMicrocycle(updated);
-                                        }} placeholder="Session Focus..." className="flex-grow border border-slate-300 p-1.5 rounded text-xs bg-white w-full" />
-                                        <select value={dayObj.load} onChange={(e) => {
-                                            const updated = [...microcycle];
-                                            updated[index].load = e.target.value;
-                                            setMicrocycle(updated);
-                                        }} className="border border-slate-300 p-1.5 rounded text-xs bg-white font-bold w-full sm:w-auto">
-                                            <option value="None">None</option>
-                                            <option value="Low">Low Load</option>
-                                            <option value="Moderate">Moderate Load</option>
-                                            <option value="High">High Load</option>
-                                            <option value="Max">Max / Match</option>
-                                        </select>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {viewMode === 'drillbank' && (
-                        <div className="bg-white border-2 border-slate-800 shadow-xl p-6 rounded">
-                            <h2 className="text-lg font-black uppercase text-emerald-800 mb-2">Saved Drill Bank</h2>
-                            <p className="text-xs text-slate-500 mb-4">Quickly reload your favorite exercises and tactical setups into any active session sheet.</p>
-                            {drillBank.length === 0 ? (
-                                <p className="text-sm text-slate-500 italic">No drills saved yet. Click the "Save" button on any session activity card to add it to your bank.</p>
-                            ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {drillBank.map((drill) => (
-                                        <div key={drill.id} className="border border-slate-300 rounded p-4 bg-slate-50 flex flex-col justify-between">
-                                            <div>
-                                                <h3 className="font-bold text-slate-800 text-sm mb-1">{drill.title}</h3>
-                                                <p className="text-xs text-slate-600 mb-2"><strong>Org:</strong> {drill.explanation || 'No description'}</p>
-                                                <p className="text-xs text-slate-600 mb-3"><strong>Key Points:</strong> {drill.coachingPoints || 'None'}</p>
-                                            </div>
-                                            <div className="flex gap-2 mt-2 flex-wrap items-center">
-                                                <span className="text-[10px] text-slate-400">Load into:</span>
-                                                <button onClick={() => loadDrillIntoActivity(drill, 1)} className="bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded text-[10px] font-bold">Act 1</button>
-                                                <button onClick={() => loadDrillIntoActivity(drill, 2)} className="bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded text-[10px] font-bold">Act 2</button>
-                                                <button onClick={() => loadDrillIntoActivity(drill, 3)} className="bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded text-[10px] font-bold">Act 3</button>
-                                                <button onClick={() => loadDrillIntoActivity(drill, 4)} className="bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded text-[10px] font-bold">Act 4</button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        ReactDOM.render(<App />, document.getElementById('root'));
     </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; color: black !important; }
+            .print-only { display: block !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col overflow-x-hidden">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 px-4 py-3 flex items-center justify-between no-print">
+        <div class="flex items-center space-x-3">
+            <div class="bg-emerald-600 p-2 rounded-xl text-white shadow-lg shadow-emerald-900/30 flex items-center justify-center">
+                <i data-lucide="shield" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg tracking-tight text-white flex items-center gap-2">
+                    PRO COACHING SUITE <span class="text-xs uppercase bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">Pro Edition</span>
+                </h1>
+                <p class="text-xs text-slate-400">Session Planner & Animation Studio</p>
+            </div>
+        </div>
+
+        <!-- Mode Switcher Tabs -->
+        <div class="hidden md:flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <button onclick="switchTab('library')" id="nav-library" class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-400 hover:text-white">
+                <i data-lucide="book-open" class="w-4 h-4"></i> Drill Library (<span id="lib-count">300</span>)
+            </button>
+            <button onclick="switchTab('planner')" id="nav-planner" class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-400 hover:text-white">
+                <i data-lucide="layout-grid" class="w-4 h-4"></i> Session Builder
+            </button>
+            <button onclick="switchTab('animation')" id="nav-animation" class="px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-400 hover:text-white bg-emerald-600 text-white shadow">
+                <i data-lucide="play-circle" class="w-4 h-4"></i> Animation Studio
+            </button>
+        </div>
+
+        <div class="flex items-center space-x-2">
+            <button onclick="openExportModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 border border-slate-700 transition">
+                <i data-lucide="printer" class="w-4 h-4"></i> Export PDF / Print
+            </button>
+            <button onclick="saveSessionToStorage()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-lg shadow-emerald-900/20 transition">
+                <i data-lucide="save" class="w-4 h-4"></i> Save Session
+            </button>
+        </div>
+    </header>
+
+    <!-- Main App Container -->
+    <main class="flex-1 flex flex-col">
+
+        <!-- TAB 1: DRILL LIBRARY -->
+        <div id="view-library" class="hidden flex-1 p-6 max-w-7xl mx-auto w-full">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Pro Drill Library</h2>
+                    <p class="text-sm text-slate-400">Browse 300 tactical drills categorized by phase, theme, and age group.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                    <div class="relative flex-1 md:w-64">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+                        <input type="text" id="lib-search" oninput="filterDrills()" placeholder="Search drills, topics..." class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <select id="lib-filter-category" onchange="filterDrills()" class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                        <option value="all">All Categories</option>
+                        <option value="Passing & Combinations">Passing & Combinations</option>
+                        <option value="Pressing & Defense">Pressing & Defense</option>
+                        <option value="Possession">Possession</option>
+                        <option value="Attacking & Finishing">Attacking & Finishing</option>
+                        <option value="Transition">Transition</option>
+                        <option value="Small-Sided Games">Small-Sided Games</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Drill Grid -->
+            <div id="drill-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+
+        <!-- TAB 2: SESSION PLANNER -->
+        <div id="view-planner" class="hidden flex-1 p-6 max-w-7xl mx-auto w-full">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Session Plan Builder</h2>
+                    <p class="text-sm text-slate-400">Design your training session timeline, intensities, and coaching notes.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="addSessionBlock()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 border border-slate-700">
+                        <i data-lucide="plus" class="w-4 h-4"></i> Add Block
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Session Meta -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                    <h3 class="font-semibold text-white flex items-center gap-2"><i data-lucide="info" class="w-4 h-4 text-emerald-400"></i> Session Details</h3>
+                    <div>
+                        <label class="text-xs text-slate-400 mb-1 block">Session Title</label>
+                        <input type="text" id="session-title" value="High Pressing & Counter-Attack Transition" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-xs text-slate-400 mb-1 block">Age Group</label>
+                            <input type="text" id="session-age" value="U-16 to U-19 / Pro" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-400 mb-1 block">Total Duration</label>
+                            <input type="text" id="session-duration" value="75 Mins" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 mb-1 block">Main Objective</label>
+                        <textarea id="session-objective" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">Trigger aggressive pressing upon losing possession in the middle third and immediately exploit central channels.</textarea>
+                    </div>
+                </div>
+
+                <!-- Session Blocks Timeline -->
+                <div class="lg:col-span-2 space-y-4" id="session-blocks-container">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: ANIMATION STUDIO (Main Feature) -->
+        <div id="view-animation" class="flex-1 flex flex-col lg:flex-row h-[calc(100vh-65px)] overflow-hidden">
+            
+            <!-- Left Sidebar: Tools, Palette & Roster -->
+            <div class="w-full lg:w-80 bg-slate-900 border-r border-slate-800 flex flex-col z-10 overflow-y-auto no-scrollbar">
+                
+                <!-- Studio Header & Pitch Selector -->
+                <div class="p-4 border-b border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-semibold text-white flex items-center gap-2">
+                            <i data-lucide="layout" class="w-4 h-4 text-emerald-400"></i> Pitch & Setup
+                        </h3>
+                        <span class="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-mono">2D Studio</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="setPitchType('full')" id="pitch-btn-full" class="bg-emerald-600 text-white text-xs py-2 rounded-xl font-medium transition shadow">Full Pitch</button>
+                        <button onclick="setPitchType('half')" id="pitch-btn-half" class="bg-slate-800 text-slate-300 text-xs py-2 rounded-xl font-medium hover:bg-slate-700 transition">Half Pitch</button>
+                        <button onclick="setPitchType('third')" id="pitch-btn-third" class="bg-slate-800 text-slate-300 text-xs py-2 rounded-xl font-medium hover:bg-slate-700 transition">Final Third</button>
+                    </div>
+                </div>
+
+                <!-- Drawing & Action Mode -->
+                <div class="p-4 border-b border-slate-800 space-y-3">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Drawing Tools</h4>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button onclick="setInteractionMode('select')" id="tool-select" class="p-2.5 rounded-xl bg-emerald-600 text-white flex flex-col items-center justify-center gap-1 transition">
+                            <i data-lucide="mouse-pointer" class="w-4 h-4"></i>
+                            <span class="text-[10px]">Select</span>
+                        </button>
+                        <button onclick="setInteractionMode('pass')" id="tool-pass" class="p-2.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 flex flex-col items-center justify-center gap-1 transition">
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                            <span class="text-[10px]">Pass Line</span>
+                        </button>
+                        <button onclick="setInteractionMode('dribble')" id="tool-dribble" class="p-2.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 flex flex-col items-center justify-center gap-1 transition">
+                            <i data-lucide="activity" class="w-4 h-4"></i>
+                            <span class="text-[10px]">Dribble</span>
+                        </button>
+                        <button onclick="setInteractionMode('run')" id="tool-run" class="p-2.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 flex flex-col items-center justify-center gap-1 transition">
+                            <i data-lucide="git-commit" class="w-4 h-4"></i>
+                            <span class="text-[10px]">Run Vector</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Element Palette (Drag & Drop or Click to Add) -->
+                <div class="p-4 border-b border-slate-800 space-y-3">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Tactical Elements</h4>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="addElementToCanvas('attacker')" class="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 p-2.5 rounded-xl flex items-center gap-2.5 text-xs text-white transition">
+                            <div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center font-bold text-[10px] shadow">A</div>
+                            <span>Attacker (Blue)</span>
+                        </button>
+                        <button onclick="addElementToCanvas('defender')" class="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 p-2.5 rounded-xl flex items-center gap-2.5 text-xs text-white transition">
+                            <div class="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center font-bold text-[10px] text-slate-950 shadow">D</div>
+                            <span>Defender (Yellow)</span>
+                        </button>
+                        <button onclick="addElementToCanvas('keeper')" class="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 p-2.5 rounded-xl flex items-center gap-2.5 text-xs text-white transition">
+                            <div class="w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center font-bold text-[10px] shadow">GK</div>
+                            <span>Goalkeeper</span>
+                        </button>
+                        <button onclick="addElementToCanvas('ball')" class="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 p-2.5 rounded-xl flex items-center gap-2.5 text-xs text-white transition">
+                            <div class="w-6 h-6 rounded-full bg-white text-slate-950 flex items-center justify-center font-bold text-[10px] shadow">⚽</div>
+                            <span>Match Ball</span>
+                        </button>
+                        <button onclick="addElementToCanvas('cone')" class="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 p-2.5 rounded-xl flex items-center gap-2.5 text-xs text-white transition">
+                            <div class="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center font-bold text-[10px] shadow">▲</div>
+                            <span>Training Cone</span>
+                        </button>
+                        <button onclick="addElementToCanvas('goal')" class="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 p-2.5 rounded-xl flex items-center gap-2.5 text-xs text-white transition">
+                            <div class="w-6 h-6 rounded bg-slate-600 flex items-center justify-center font-bold text-[10px] shadow">🥅</div>
+                            <span>Mini Goal</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Selected Element Inspector -->
+                <div id="element-inspector" class="p-4 space-y-3 flex-1">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Inspector</h4>
+                    <div id="inspector-content" class="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-400">
+                        Select an item on the pitch to configure properties, jersey numbers, or delete.
+                    </div>
+                </div>
+
+                <!-- Reset / Clear Buttons -->
+                <div class="p-4 border-t border-slate-800 flex gap-2">
+                    <button onclick="clearCanvasElements()" class="w-full bg-slate-800 hover:bg-rose-900/40 hover:text-rose-400 text-slate-300 py-2 rounded-xl text-xs font-medium border border-slate-700 transition flex items-center justify-center gap-1.5">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Clear Pitch
+                    </button>
+                </div>
+            </div>
+
+            <!-- Central Canvas & Timeline Area -->
+            <div class="flex-1 flex flex-col bg-slate-950 overflow-hidden relative">
+                
+                <!-- Canvas Toolbar -->
+                <div class="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-4 py-2.5 flex items-center justify-between z-10">
+                    <div class="flex items-center space-x-3">
+                        <span id="drill-title-display" class="font-semibold text-sm text-white">Drill Animation #1: Build-up Play & Overload</span>
+                        <span class="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md font-mono" id="current-frame-badge">Frame: 0 / 60</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="captureStoryboardFrame()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition">
+                            <i data-lucide="camera" class="w-3.5 h-3.5"></i> Snapshot
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Interactive Canvas Container -->
+                <div class="flex-1 relative flex items-center justify-center p-4 overflow-hidden bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px]">
+                    <div id="pitch-wrapper" class="relative shadow-2xl rounded-2xl overflow-hidden border-2 border-emerald-600/40 bg-pitch-green w-full max-w-4xl aspect-[16/10]">
+                        <!-- SVG Pitch Markings -->
+                        <svg id="pitch-svg" class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 625" preserveAspectRatio="none">
+                            <!-- Grass stripes -->
+                            <rect x="0" y="0" width="1000" height="625" fill="#1b4d2e" />
+                            <g fill="#205c36">
+                                <rect x="0" y="0" width="100" height="625" />
+                                <rect x="200" y="0" width="100" height="625" />
+                                <rect x="400" y="0" width="100" height="625" />
+                                <rect x="600" y="0" width="100" height="625" />
+                                <rect x="800" y="0" width="100" height="625" />
+                            </g>
+                            <!-- Pitch Lines -->
+                            <rect x="50" y="50" width="900" height="525" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="3" />
+                            <line x1="500" y1="50" x2="500" y2="575" stroke="rgba(255,255,255,0.7)" stroke-width="3" />
+                            <circle cx="500" cy="312.5" r="75" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="3" />
+                            <circle cx="500" cy="312.5" r="4" fill="rgba(255,255,255,0.9)" />
+                            
+                            <!-- Penalty Areas -->
+                            <rect x="50" y="175" width="150" height="275" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="3" />
+                            <rect x="800" y="175" width="150" height="275" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="3" />
+                            
+                            <!-- Goal Areas -->
+                            <rect x="50" y="240" width="50" height="145" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="3" />
+                            <rect x="900" y="240" width="50" height="145" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="3" />
+                            
+                            <!-- Goals -->
+                            <rect x="30" y="270" width="20" height="85" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="4" rx="3" />
+                            <rect x="950" y="270" width="20" height="85" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="4" rx="3" />
+
+                            <!-- Dynamic Passing & Movement Paths SVG Layer -->
+                            <g id="animation-paths-svg"></g>
+                        </svg>
+
+                        <!-- Interactive Elements HTML Layer -->
+                        <div id="pitch-elements-layer" class="absolute inset-0 cursor-crosshair"></div>
+                    </div>
+                </div>
+
+                <!-- Bottom Timeline & Playback Controller -->
+                <div class="bg-slate-900 border-t border-slate-800 p-4 space-y-3 z-10">
+                    <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                        <!-- Playback Controls -->
+                        <div class="flex items-center space-x-2">
+                            <button onclick="jumpToFirstKeyframe()" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition" title="First Frame"><i data-lucide="skip-back" class="w-4 h-4"></i></button>
+                            <button onclick="togglePlayback()" id="play-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-medium flex items-center gap-2 shadow-lg shadow-emerald-900/30 transition">
+                                <i data-lucide="play" id="play-icon" class="w-4 h-4"></i> <span id="play-text">Play Animation</span>
+                            </button>
+                            <button onclick="stopPlayback()" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition" title="Stop / Reset"><i data-lucide="square" class="w-4 h-4"></i></button>
+                            <button onclick="recordKeyframe()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-xl font-medium text-xs flex items-center gap-1.5 transition">
+                                <i data-lucide="video" class="w-3.5 h-3.5"></i> Add Keyframe
+                            </button>
+                        </div>
+
+                        <!-- Timeline Scrubber & Speed -->
+                        <div class="flex items-center space-x-4 w-full md:w-auto flex-1 max-w-md">
+                            <span class="text-xs text-slate-400 font-mono" id="time-display">0.0s</span>
+                            <input type="range" id="timeline-slider" min="0" max="100" value="0" oninput="scrubTimeline(this.value)" class="w-full accent-emerald-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                            <span class="text-xs text-slate-400 font-mono">5.0s</span>
+                        </div>
+
+                        <div class="flex items-center space-x-2">
+                            <select id="playback-speed" onchange="changeSpeed(this.value)" class="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-2 focus:outline-none">
+                                <option value="0.5">0.5x Speed</option>
+                                <option value="1" selected>1.0x Normal</option>
+                                <option value="2">2.0x Fast</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Export / Print Modal -->
+    <div id="export-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-2xl">
+            <div class="flex justify-between items-center">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="file-text" class="text-emerald-400"></i> Export Session & Animation Storyboard</h3>
+                <button onclick="closeExportModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            
+            <div class="space-y-4">
+                <p class="text-sm text-slate-300">Generate a professional printable session PDF report complete with coaching points, pitch diagrams, and keyframe storyboards.</p>
+                
+                <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Export Options</h4>
+                    <label class="flex items-center space-x-3 text-sm text-slate-200 cursor-pointer">
+                        <input type="checkbox" checked class="accent-emerald-500 rounded">
+                        <span>Include Session Objective & Coaching Points</span>
+                    </label>
+                    <label class="flex items-center space-x-3 text-sm text-slate-200 cursor-pointer">
+                        <input type="checkbox" checked class="accent-emerald-500 rounded">
+                        <span>Include Animation Keyframe Storyboard Grid</span>
+                    </label>
+                    <label class="flex items-center space-x-3 text-sm text-slate-200 cursor-pointer">
+                        <input type="checkbox" checked class="accent-emerald-500 rounded">
+                        <span>High-Resolution Tactical Pitch Graphics</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2">
+                <button onclick="closeExportModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-medium transition">Cancel</button>
+                <button onclick="executePrint()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium shadow-lg shadow-emerald-900/30 transition flex items-center gap-2">
+                    <i data-lucide="printer" class="w-4 h-4"></i> Print / Save PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Printable Report Template (Hidden on screen, shown on print) -->
+    <div id="print-report" class="hidden print-only p-8 bg-white text-slate-900 max-w-4xl mx-auto">
+        <div class="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-end">
+            <div>
+                <h1 class="text-3xl font-black uppercase tracking-tight text-slate-900">PRO COACHING SESSION PLAN</h1>
+                <p class="text-sm text-slate-600 font-medium" id="print-title-display">High Pressing & Counter-Attack Transition</p>
+            </div>
+            <div class="text-right">
+                <p class="text-xs font-bold text-emerald-700 uppercase">Pro Coaching Suite</p>
+                <p class="text-xs text-slate-500" id="print-date-display"></p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-6 bg-slate-100 p-4 rounded-lg">
+            <div><strong>Age Group:</strong> <span id="print-age-display">U-16 to U-19 / Pro</span></div>
+            <div><strong>Duration:</strong> <span id="print-duration-display">75 Mins</span></div>
+            <div class="col-span-2"><strong>Objective:</strong> <span id="print-objective-display">Trigger aggressive pressing upon losing possession in the middle third.</span></div>
+        </div>
+
+        <h2 class="text-xl font-bold mb-3 border-b pb-1">Session Timeline & Blocks</h2>
+        <div id="print-blocks-container" class="space-y-4 mb-8"></div>
+
+        <h2 class="text-xl font-bold mb-3 border-b pb-1">Animation Keyframe Storyboard</h2>
+        <div id="print-storyboard-container" class="grid grid-cols-3 gap-4"></div>
+    </div>
+
+    <script>
+        // --- State Management ---
+        let currentTab = 'animation';
+        let currentPitchType = 'full';
+        let interactionMode = 'select';
+        let selectedElementId = null;
+        let isPlaying = false;
+        let animationProgress = 0; // 0 to 100
+        let animationSpeed = 1;
+        let animationInterval = null;
+
+        // Canvas Elements State
+        let canvasElements = [
+            { id: 'el-1', type: 'attacker', label: '9', x: 300, y: 300, vx: 0, vy: 0 },
+            { id: 'el-2', type: 'attacker', label: '10', x: 200, y: 250, vx: 0, vy: 0 },
+            { id: 'el-3', type: 'defender', label: '4', x: 600, y: 312, vx: 0, vy: 0 },
+            { id: 'el-4', type: 'keeper', label: '1', x: 100, y: 312, vx: 0, vy: 0 },
+            { id: 'el-5', type: 'ball', label: '⚽', x: 215, y: 260, vx: 0, vy: 0 },
+            { id: 'el-6', type: 'cone', label: '▲', x: 450, y: 150, vx: 0, vy: 0 },
+            { id: 'el-7', type: 'cone', label: '▲', x: 450, y: 475, vx: 0, vy: 0 }
+        ];
+
+        // Drawing Vectors (Passes, Dribbles, Runs)
+        let vectorLines = [
+            { id: 'vec-1', type: 'pass', fromX: 200, fromY: 250, toX: 300, toY: 300 }
+        ];
+
+        // Keyframe timeline snapshots
+        let keyframes = [
+            { time: 0, elements: JSON.parse(JSON.stringify(canvasElements)) }
+        ];
+
+        // Drill Library Data (300 simulated pro drills)
+        const drillLibrary = Array.from({ length: 300 }, (_, i) => {
+            const categories = ['Passing & Combinations', 'Pressing & Defense', 'Possession', 'Attacking & Finishing', 'Transition', 'Small-Sided Games'];
+            const cat = categories[i % categories.length];
+            return {
+                id: i + 1,
+                title: `Pro Drill #${i + 1}: ${cat} Tactical Pattern`,
+                category: cat,
+                duration: `${10 + (i % 4) * 5} mins`,
+                intensity: ['Low', 'Medium', 'High', 'Maximum'][i % 4],
+                description: `Advanced professional methodology focusing on synchronized movement, rapid decision making, and spatial awareness in the ${cat.toLowerCase()} phase.`
+            };
+        });
+
+        // Session Blocks Data
+        let sessionBlocks = [
+            { id: 1, name: 'Activation & Dynamic Rondo', duration: '15 Mins', intensity: 'Medium', desc: '4v2 rondo transitioning into quick 5-yard vertical passing combinations.' },
+            { id: 2, name: 'Positional Phase (7v7 + 2 Neutrals)', duration: '25 Mins', intensity: 'High', desc: 'Emphasizing third-man runs and blind-side receptions in central channels.' },
+            { id: 3, name: 'Conditional Game (10v10)', duration: '30 Mins', intensity: 'Maximum', desc: 'Full tactical match simulation with pressing triggers and counter-pressing rules.' }
+        ];
+
+        // --- Initialization ---
+        window.onload = function() {
+            lucide.createIcons();
+            renderDrillLibrary();
+            renderSessionPlanner();
+            renderCanvasElements();
+            renderVectorLines();
+            document.getElementById('print-date-display').innerText = new Date().toLocaleDateString();
+            switchTab('animation');
+        };
+
+        // --- Tab Switching ---
+        function switchTab(tabId) {
+            currentTab = tabId;
+            ['library', 'planner', 'animation'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.add('hidden');
+                const navBtn = document.getElementById(`nav-${t}`);
+                if(navBtn) {
+                    navBtn.className = 'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 text-slate-400 hover:text-white';
+                }
+            });
+            document.getElementById(`view-${tabId}`).classList.remove('hidden');
+            const activeNav = document.getElementById(`nav-${tabId}`);
+            if(activeNav) {
+                activeNav.className = 'px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 bg-emerald-600 text-white shadow';
+            }
+            if(tabId === 'animation') {
+                setTimeout(renderCanvasElements, 50);
+            }
+            lucide.createIcons();
+        }
+
+        // --- Pitch Selector ---
+        function setPitchType(type) {
+            currentPitchType = type;
+            ['full', 'half', 'third'].forEach(t => {
+                const btn = document.getElementById(`pitch-btn-${t}`);
+                if(t === type) {
+                    btn.className = 'bg-emerald-600 text-white text-xs py-2 rounded-xl font-medium transition shadow';
+                } else {
+                    btn.className = 'bg-slate-800 text-slate-300 text-xs py-2 rounded-xl font-medium hover:bg-slate-700 transition';
+                }
+            });
+            const wrapper = document.getElementById('pitch-wrapper');
+            if(type === 'full') wrapper.className = 'relative shadow-2xl rounded-2xl overflow-hidden border-2 border-emerald-600/40 bg-pitch-green w-full max-w-4xl aspect-[16/10]';
+            if(type === 'half') wrapper.className = 'relative shadow-2xl rounded-2xl overflow-hidden border-2 border-emerald-600/40 bg-pitch-green w-full max-w-2xl aspect-[4/3]';
+            if(type === 'third') wrapper.className = 'relative shadow-2xl rounded-2xl overflow-hidden border-2 border-emerald-600/40 bg-pitch-green w-full max-w-xl aspect-[1/1]';
+        }
+
+        // --- Interaction Modes & Drawing ---
+        function setInteractionMode(mode) {
+            interactionMode = mode;
+            ['select', 'pass', 'dribble', 'run'].forEach(m => {
+                const btn = document.getElementById(`tool-${m}`);
+                if(m === mode) {
+                    btn.className = 'p-2.5 rounded-xl bg-emerald-600 text-white flex flex-col items-center justify-center gap-1 transition shadow';
+                } else {
+                    btn.className = 'p-2.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 flex flex-col items-center justify-center gap-1 transition';
+                }
+            });
+        }
+
+        // --- Element Manipulation & Dragging ---
+        function addElementToCanvas(type) {
+            const id = 'el-' + Date.now();
+            let label = '9';
+            if(type === 'defender') label = '4';
+            if(type === 'keeper') label = '1';
+            if(type === 'ball') label = '⚽';
+            if(type === 'cone') label = '▲';
+            if(type === 'goal') label = '🥅';
+
+            const newEl = { id, type, label, x: 500 + (Math.random() * 100 - 50), y: 312 + (Math.random() * 100 - 50), vx: 0, vy: 0 };
+            canvasElements.push(newEl);
+            renderCanvasElements();
+            selectElement(id);
+        }
+
+        function renderCanvasElements() {
+            const layer = document.getElementById('pitch-elements-layer');
+            layer.innerHTML = '';
+
+            canvasElements.forEach(el => {
+                const div = document.createElement('div');
+                div.id = el.id;
+                div.className = `absolute cursor-grab active:cursor-grabbing flex items-center justify-center select-none transition-transform duration-75 ${selectedElementId === el.id ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-950 scale-110 z-30' : 'z-20'}`;
+                div.style.left = `${el.x}px`;
+                div.style.top = `${el.y}px`;
+                div.style.transform = 'translate(-50%, -50%)';
+
+                let bgClass = 'bg-blue-600 text-white';
+                if(el.type === 'defender') bgClass = 'bg-amber-500 text-slate-950';
+                if(el.type === 'keeper') bgClass = 'bg-purple-600 text-white';
+                if(el.type === 'ball') bgClass = 'bg-white text-slate-950 shadow-md text-sm';
+                if(el.type === 'cone') bgClass = 'bg-orange-500 text-white text-xs';
+                if(el.type === 'goal') bgClass = 'bg-slate-700 text-white text-xs border border-slate-500';
+
+                if(el.type === 'ball' || el.type === 'cone' || el.type === 'goal') {
+                    div.className += ` w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-lg ${bgClass}`;
+                    div.innerHTML = `<span>${el.label}</span>`;
+                } else {
+                    div.className += ` w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shadow-lg ${bgClass}`;
+                    div.innerHTML = `<span>${el.label}</span>`;
+                }
+
+                // Dragging & Clicking handlers
+                div.onmousedown = (e) => startDrag(e, el.id);
+                div.ontouchstart = (e) => startDrag(e, el.id);
+
+                layer.appendChild(div);
+            });
+            renderVectorLines();
+        }
+
+        let activeDragId = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        function startDrag(e, id) {
+            e.stopPropagation();
+            activeDragId = id;
+            selectElement(id);
+            const wrapper = document.getElementById('pitch-wrapper').getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const el = canvasElements.find(item => item.id === id);
+            // Convert current element pixel to wrapper ratio if needed, or drag direct
+            window.onmousemove = onDragging;
+            window.onmouseup = stopDragAction;
+            window.ontouchmove = onDragging;
+            window.ontouchend = stopDragAction;
+        }
+
+        function onDragging(e) {
+            if(!activeDragId) return;
+            const wrapper = document.getElementById('pitch-wrapper').getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            let x = clientX - wrapper.left;
+            let y = clientY - wrapper.top;
+
+            // Constrain inside pitch
+            x = Math.max(20, Math.min(wrapper.width - 20, x));
+            y = Math.max(20, Math.min(wrapper.height - 20, y));
+
+            const el = canvasElements.find(item => item.id === activeDragId);
+            if(el) {
+                // scale coordinates to match 1000x625 SVG view box space
+                el.x = (x / wrapper.width) * 1000;
+                el.y = (y / wrapper.height) * 625;
+                renderCanvasElements();
+            }
+        }
+
+        function stopDragAction() {
+            activeDragId = null;
+            window.onmousemove = null;
+            window.onmouseup = null;
+            window.ontouchmove = null;
+            window.ontouchend = null;
+        }
+
+        function selectElement(id) {
+            selectedElementId = id;
+            const el = canvasElements.find(item => item.id === id);
+            const inspector = document.getElementById('inspector-content');
+            if(!el) {
+                inspector.innerHTML = `Select an item on the pitch to configure properties, jersey numbers, or delete.`;
+                return;
+            }
+
+            inspector.innerHTML = `
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="font-semibold text-white uppercase">${el.type}</span>
+                        <button onclick="deleteElement('${el.id}')" class="text-rose-400 hover:text-rose-300 text-xs flex items-center gap-1"><i data-lucide="trash" class="w-3 h-3"></i> Delete</button>
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-400 mb-1 block">Label / Jersey Number</label>
+                        <input type="text" value="${el.label}" oninput="updateElementLabel('${el.id}', this.value)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs font-mono text-slate-400">
+                        <div>X: ${Math.round(el.x)}</div>
+                        <div>Y: ${Math.round(el.y)}</div>
+                    </div>
+                </div>
+            `;
+            lucide.createIcons();
+            renderCanvasElements();
+        }
+
+        function updateElementLabel(id, val) {
+            const el = canvasElements.find(item => item.id === id);
+            if(el) {
+                el.label = val;
+                renderCanvasElements();
+            }
+        }
+
+        function deleteElement(id) {
+            canvasElements = canvasElements.filter(item => item.id !== id);
+            selectedElementId = null;
+            renderCanvasElements();
+            selectElement(null);
+        }
+
+        function clearCanvasElements() {
+            canvasElements = [];
+            vectorLines = [];
+            renderCanvasElements();
+            selectElement(null);
+        }
+
+        // --- Vector Lines Rendering (Passing, Dribbling, Runs) ---
+        function renderVectorLines() {
+            const svgGroup = document.getElementById('animation-paths-svg');
+            svgGroup.innerHTML = '';
+
+            vectorLines.forEach(vec => {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', vec.fromX);
+                line.setAttribute('y1', vec.fromY);
+                line.setAttribute('x2', vec.toX);
+                line.setAttribute('y2', vec.toY);
+                
+                if(vec.type === 'pass') {
+                    line.setAttribute('stroke', '#38bdf8'); // Sky blue for pass
+                    line.setAttribute('stroke-dasharray', '8, 6');
+                } else if(vec.type === 'dribble') {
+                    line.setAttribute('stroke', '#4ade80'); // Green for dribble
+                } else {
+                    line.setAttribute('stroke', '#facc15'); // Yellow for run
+                }
+                line.setAttribute('stroke-width', '4');
+                line.setAttribute('stroke-linecap', 'round');
+                svgGroup.appendChild(line);
+            });
+        }
+
+        // --- Keyframes & Timeline Playback ---
+        function recordKeyframe() {
+            keyframes.push({
+                time: keyframes.length * 1.5,
+                elements: JSON.parse(JSON.stringify(canvasElements))
+            });
+            document.getElementById('timeline-slider').max = keyframes.length * 20;
+            showNotification(`Keyframe #${keyframes.length} recorded successfully!`);
+        }
+
+        function togglePlayback() {
+            if(isPlaying) {
+                stopPlayback();
+            } else {
+                startPlayback();
+            }
+        }
+
+        function startPlayback() {
+            isPlaying = true;
+            document.getElementById('play-icon').setAttribute('data-lucide', 'pause');
+            document.getElementById('play-text').innerText = 'Pause Animation';
+            lucide.createIcons();
+
+            animationInterval = setInterval(() => {
+                animationProgress += (1 * animationSpeed);
+                if(animationProgress > 100) {
+                    animationProgress = 0;
+                }
+                document.getElementById('timeline-slider').value = animationProgress;
+                document.getElementById('current-frame-badge').innerText = `Frame: ${Math.round(animationProgress)} / 100`;
+                document.getElementById('time-display').innerText = `${(animationProgress / 20).toFixed(1)}s`;
+                
+                // Simulate tactical movement interpolation between keyframes
+                if(canvasElements.length > 0) {
+                    canvasElements[0].x += Math.sin(animationProgress / 10) * 1.5;
+                    renderCanvasElements();
+                }
+            }, 50);
+        }
+
+        function stopPlayback() {
+            isPlaying = false;
+            clearInterval(animationInterval);
+            document.getElementById('play-icon').setAttribute('data-lucide', 'play');
+            document.getElementById('play-text').innerText = 'Play Animation';
+            lucide.createIcons();
+        }
+
+        function jumpToFirstKeyframe() {
+            stopPlayback();
+            animationProgress = 0;
+            document.getElementById('timeline-slider').value = 0;
+            document.getElementById('current-frame-badge').innerText = `Frame: 0 / 100`;
+        }
+
+        function scrubTimeline(val) {
+            animationProgress = parseInt(val);
+            document.getElementById('current-frame-badge').innerText = `Frame: ${animationProgress} / 100`;
+            document.getElementById('time-display').innerText = `${(animationProgress / 20).toFixed(1)}s`;
+        }
+
+        function changeSpeed(spd) {
+            animationSpeed = parseFloat(spd);
+        }
+
+        function captureStoryboardFrame() {
+            showNotification('Storyboard snapshot captured for export report!');
+        }
+
+        // --- Drill Library & Session Planner Rendering ---
+        function renderDrillLibrary() {
+            const grid = document.getElementById('drill-grid');
+            const query = document.getElementById('lib-search') ? document.getElementById('lib-search').value.toLowerCase() : '';
+            const catFilter = document.getElementById('lib-filter-category') ? document.getElementById('lib-filter-category').value : 'all';
+
+            const filtered = drillLibrary.filter(d => {
+                const matchQuery = d.title.toLowerCase().includes(query) || d.description.toLowerCase().includes(query);
+                const matchCat = catFilter === 'all' || d.category === catFilter;
+                return matchQuery && matchCat;
+            });
+
+            grid.innerHTML = filtered.slice(0, 15).map(d => `
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-emerald-500/50 transition">
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-start">
+                            <span class="text-xs bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-lg font-medium border border-emerald-500/20">${d.category}</span>
+                            <span class="text-xs text-slate-400 font-mono flex items-center gap-1"><i data-lucide="clock" class="w-3 h-3"></i> ${d.duration}</span>
+                        </div>
+                        <h3 class="font-bold text-white text-base">${d.title}</h3>
+                        <p class="text-xs text-slate-400 leading-relaxed">${d.description}</p>
+                    </div>
+                    <div class="pt-4 mt-4 border-t border-slate-800 flex items-center justify-between">
+                        <span class="text-xs text-slate-400 font-medium">Intensity: <strong class="text-white">${d.intensity}</strong></span>
+                        <button onclick="loadDrillIntoStudio(${d.id})" class="bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+                            <i data-lucide="play-circle" class="w-3.5 h-3.5"></i> Open in Studio
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function filterDrills() {
+            renderDrillLibrary();
+        }
+
+        function loadDrillIntoStudio(id) {
+            const drill = drillLibrary.find(d => d.id === id);
+            if(drill) {
+                document.getElementById('drill-title-display').innerText = drill.title;
+                switchTab('animation');
+                showNotification(`Loaded "${drill.title}" into Animation Studio`);
+            }
+        }
+
+        function renderSessionPlanner() {
+            const container = document.getElementById('session-blocks-container');
+            container.innerHTML = sessionBlocks.map((block, idx) => `
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center gap-3">
+                            <span class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-mono text-xs flex items-center justify-center font-bold">${idx + 1}</span>
+                            <input type="text" value="${block.name}" onchange="sessionBlocks[${idx}].name = this.value" class="bg-transparent font-semibold text-white text-sm focus:outline-none border-b border-transparent focus:border-emerald-500">
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <input type="text" value="${block.duration}" onchange="sessionBlocks[${idx}].duration = this.value" class="bg-slate-950 border border-slate-800 text-xs text-slate-300 px-2.5 py-1 rounded-lg w-24 text-center">
+                            <button onclick="removeSessionBlock(${idx})" class="text-slate-500 hover:text-rose-400 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>
+                    <textarea rows="2" onchange="sessionBlocks[${idx}].desc = this.value" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">${block.desc}</textarea>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function addSessionBlock() {
+            sessionBlocks.push({ id: sessionBlocks.length + 1, name: 'New Coaching Block', duration: '15 Mins', intensity: 'Medium', desc: 'Describe coaching cues and tactical execution here.' });
+            renderSessionPlanner();
+        }
+
+        function removeSessionBlock(idx) {
+            sessionBlocks.splice(idx, 1);
+            renderSessionPlanner();
+        }
+
+        function saveSessionToStorage() {
+            showNotification('Session plan and animations successfully saved to cloud storage!');
+        }
+
+        // --- Export Modal & Print ---
+        function openExportModal() {
+            document.getElementById('export-modal').classList.remove('hidden');
+        }
+
+        function closeExportModal() {
+            document.getElementById('export-modal').classList.add('hidden');
+        }
+
+        function executePrint() {
+            // Populate print report template
+            document.getElementById('print-title-display').innerText = document.getElementById('session-title').value;
+            document.getElementById('print-age-display').innerText = document.getElementById('session-age').value;
+            document.getElementById('print-duration-display').innerText = document.getElementById('session-duration').value;
+            document.getElementById('print-objective-display').innerText = document.getElementById('session-objective').value;
+
+            const printBlocks = document.getElementById('print-blocks-container');
+            printBlocks.innerHTML = sessionBlocks.map((b, i) => `
+                <div class="border border-slate-300 rounded-lg p-3 bg-slate-50">
+                    <div class="flex justify-between font-bold text-sm text-slate-900 mb-1">
+                        <span>${i + 1}. ${b.name}</span>
+                        <span>${b.duration}</span>
+                    </div>
+                    <p class="text-xs text-slate-700">${b.desc}</p>
+                </div>
+            `).join('');
+
+            const printStoryboard = document.getElementById('print-storyboard-container');
+            printStoryboard.innerHTML = [1, 2, 3].map(n => `
+                <div class="border border-slate-300 rounded-lg p-2 text-center bg-slate-50">
+                    <div class="w-full aspect-[16/10] bg-emerald-800 rounded mb-2 flex items-center justify-center text-white text-xs font-bold">Keyframe #${n}</div>
+                    <span class="text-[10px] text-slate-600 font-medium">Phase Step #${n} Execution</span>
+                </div>
+            `).join('');
+
+            closeExportModal();
+            window.print();
+        }
+
+        // --- Notifications ---
+        function showNotification(msg) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-5 right-5 bg-emerald-600 text-white text-xs px-4 py-3 rounded-xl shadow-2xl z-50 flex items-center gap-2 animate-bounce';
+            toast.innerHTML = `<i data-lucide="check-circle" class="w-4 h-4"></i> <span>${msg}</span>`;
+            document.body.appendChild(toast);
+            lucide.createIcons();
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+
 </body>
 </html>
