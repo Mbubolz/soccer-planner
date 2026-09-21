@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pro Session Planner & Club Suite</title>
+  <title>Coach Board | Session Planner</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -11,597 +11,81 @@
   <style>
     @media print {
       body { background:#fff !important; color:#0f172a !important; }
-      .print\:hidden { display:none !important; }
+      .print\:hidden,.no-print { display:none !important; }
       .print\:shadow-none { box-shadow:none !important; }
       .print\:border-none { border:none !important; }
-      .print\:bg-slate-800 { background:#1e293b !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-      .print\:bg-red-900 { background:#7f1d1d !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-      .hide-print { display:none !important; }
+      .print\:break-inside-avoid { break-inside:avoid; }
+      .print-board { display:block !important; }
     }
     * { box-sizing:border-box; }
     body { margin:0; }
-    .pitch-grid {
-      background:
-        linear-gradient(rgba(255,255,255,0.04), rgba(255,255,255,0.04)),
-        radial-gradient(circle at center, rgba(255,255,255,0.06), rgba(0,0,0,0.05));
-    }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-900 font-sans antialiased">
-  <div id="root"></div>
-
-  <script type="text/babel">
-    const { useEffect, useMemo, useRef, useState } = React;
-
-    const STORAGE = 'pro_soccer_planner_v21';
-
-    const zoneSets = {
-      traditional: [
-        { id: 'defensive', label: 'Defensive third', short: 'DEFENSIVE THIRD', x: 0, y: 0, w: 33.333, h: 100, color: '#2563eb' },
-        { id: 'middle', label: 'Middle third', short: 'MIDDLE THIRD', x: 33.333, y: 0, w: 33.334, h: 100, color: '#16a34a' },
-        { id: 'attacking', label: 'Attacking third', short: 'ATTACKING THIRD', x: 66.667, y: 0, w: 33.333, h: 100, color: '#dc2626' }
-      ],
-      halfspaces: [
-        { id: 'left-wide', label: 'Left wide channel', short: 'LEFT WIDE', x: 0, y: 0, w: 16.667, h: 100, color: '#0ea5e9' },
-        { id: 'left-half', label: 'Left half-space', short: 'LEFT HALF-SPACE', x: 16.667, y: 0, w: 16.667, h: 100, color: '#8b5cf6' },
-        { id: 'central', label: 'Central lane', short: 'CENTRAL', x: 33.333, y: 0, w: 33.334, h: 100, color: '#16a34a' },
-        { id: 'right-half', label: 'Right half-space', short: 'RIGHT HALF-SPACE', x: 66.667, y: 0, w: 16.667, h: 100, color: '#8b5cf6' },
-        { id: 'right-wide', label: 'Right wide channel', short: 'RIGHT WIDE', x: 83.333, y: 0, w: 16.667, h: 100, color: '#0ea5e9' }
-      ]
-    };
-
-    const DEFAULT_SESSION = {
-      clubName: 'ACADEMY & CLUB DEVELOPMENT SUITE',
-      team: '',
-      date: '',
-      focus: 'Build phase: break lines, create half-space access, and attack with positive width.',
-      objectives: 'Press high, trigger inside the central lane, and use the wide channels as progression routes.',
-      activities: [
-        { title: 'Activity 1', explanation: 'Rondo and technical activation to prepare the receiving angles.' },
-        { title: 'Activity 2', explanation: 'Build-up pattern with 6 and 8 linking into the half-space.' },
-        { title: 'Activity 3', explanation: 'Progression drill with final-third entries and finishing.' }
-      ],
-      tags: ['Press triggers', 'Half-space access', 'Body shape', 'Three-stage build']
-    };
-
-    function clone(value) {
-      return JSON.parse(JSON.stringify(value));
-    }
-
-    function loadStore() {
-      try {
-        const raw = localStorage.getItem(STORAGE);
-        return raw ? JSON.parse(raw) : {};
-      } catch {
-        return {};
-      }
-    }
-
-    function Panel({ title, subtitle, children, className = '' }) {
-      return (
-        <section className={`bg-white border-2 border-slate-900 rounded-2xl shadow-xl p-5 sm:p-7 ${className}`}>
-          <h2 className="text-xl font-black uppercase tracking-tight mb-1">{title}</h2>
-          {subtitle && <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-4">{subtitle}</p>}
-          {children}
-        </section>
-      );
-    }
-
-    function Field({ zoneMode, setZoneMode }) {
-      const canvasRef = useRef(null);
-      const [tool, setTool] = useState('select');
-      const [color, setColor] = useState('#facc15');
-      const [objects, setObjects] = useState([]);
-      const [drawing, setDrawing] = useState(null);
-      const [selectedId, setSelectedId] = useState(null);
-
-      const zones = zoneSets[zoneMode];
-
-      function pointFromEvent(event) {
-        const rect = canvasRef.current.getBoundingClientRect();
-        return {
-          x: (event.clientX - rect.left) * 560 / rect.width,
-          y: (event.clientY - rect.top) * 320 / rect.height
-        };
-      }
-
-      function nearestObject(p, maxDistance = 18) {
-        let best = { index: -1, dist: maxDistance + 1 };
-        objects.forEach((obj, index) => {
-          const cx = obj.x ?? obj.sx ?? 0;
-          const cy = obj.y ?? obj.sy ?? 0;
-          const d = Math.hypot(cx - p.x, cy - p.y);
-          if (d < best.dist) {
-            best = { index, dist: d };
-          }
-        });
-        return best.index;
-      }
-
-      useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, 560, 320);
-
-        ctx.fillStyle = '#166534';
-        ctx.fillRect(0, 0, 560, 320);
-
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(8, 8, 544, 304);
-
-        ctx.beginPath();
-        ctx.moveTo(280, 8);
-        ctx.lineTo(280, 312);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(280, 160, 45, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.strokeRect(8, 105, 72, 110);
-        ctx.strokeRect(480, 105, 72, 110);
-        ctx.strokeRect(8, 135, 25, 50);
-        ctx.strokeRect(527, 135, 25, 50);
-
-        objects.forEach((obj, index) => {
-          const selected = index === selectedId;
-          ctx.save();
-          ctx.strokeStyle = selected ? '#fef3c7' : obj.color || '#ffffff';
-          ctx.fillStyle = obj.color || '#ffffff';
-          ctx.lineWidth = selected ? 4 : 3;
-          ctx.lineCap = 'round';
-
-          if (obj.type === 'pass' || obj.type === 'run' || obj.type === 'line') {
-            ctx.setLineDash(obj.type === 'pass' ? [8, 6] : obj.type === 'run' ? [4, 5] : []);
-            ctx.beginPath();
-            ctx.moveTo(obj.sx, obj.sy);
-            ctx.lineTo(obj.ex, obj.ey);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            const angle = Math.atan2(obj.ey - obj.sy, obj.ex - obj.sx);
-            ctx.beginPath();
-            ctx.moveTo(obj.ex, obj.ey);
-            ctx.lineTo(obj.ex - 10 * Math.cos(angle - 0.5), obj.ey - 10 * Math.sin(angle - 0.5));
-            ctx.lineTo(obj.ex - 10 * Math.cos(angle + 0.5), obj.ey - 10 * Math.sin(angle + 0.5));
-            ctx.closePath();
-            ctx.fill();
-          } else if (obj.type === 'freehand') {
-            ctx.beginPath();
-            obj.points.forEach((point, pointIndex) => {
-              if (pointIndex === 0) ctx.moveTo(point.x, point.y); else ctx.lineTo(point.x, point.y);
-            });
-            ctx.stroke();
-          } else if (obj.type === 'player') {
-            ctx.beginPath();
-            ctx.arc(obj.x, obj.y, 11, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#111827';
-            ctx.font = 'bold 10px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(obj.label || '', obj.x, obj.y + 4);
-          } else if (obj.type === 'marker') {
-            ctx.beginPath();
-            ctx.arc(obj.x, obj.y, 8, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#111827';
-            ctx.fillRect(obj.x - 1, obj.y - 12, 2, 18);
-          } else if (obj.type === 'cone') {
-            ctx.beginPath();
-            ctx.moveTo(obj.x, obj.y - 9);
-            ctx.lineTo(obj.x - 8, obj.y + 9);
-            ctx.lineTo(obj.x + 8, obj.y + 9);
-            ctx.closePath();
-            ctx.fill();
-          } else if (obj.type === 'ball') {
-            ctx.beginPath();
-            ctx.arc(obj.x, obj.y, 6, 0, Math.PI * 2);
-            ctx.fill();
-          }
-
-          ctx.restore();
-        });
-
-        if (drawing) {
-          ctx.save();
-          ctx.strokeStyle = drawing.color || color;
-          ctx.lineWidth = 3;
-          ctx.lineCap = 'round';
-          if (drawing.type === 'freehand') {
-            ctx.beginPath();
-            drawing.points.forEach((point, index) => {
-              if (index === 0) ctx.moveTo(point.x, point.y); else ctx.lineTo(point.x, point.y);
-            });
-            ctx.stroke();
-          } else {
-            ctx.setLineDash(drawing.type === 'pass' ? [8, 6] : drawing.type === 'run' ? [4, 5] : []);
-            ctx.beginPath();
-            ctx.moveTo(drawing.sx, drawing.sy);
-            ctx.lineTo(drawing.ex, drawing.ey);
-            ctx.stroke();
-            ctx.setLineDash([]);
-          }
-          ctx.restore();
-        }
-      }, [objects, drawing, selectedId, color, zoneMode]);
-
-      function addObject(obj) {
-        setObjects(prev => [...prev, obj]);
-      }
-
-      function pointerDown(event) {
-        const p = pointFromEvent(event);
-
-        if (tool === 'erase') {
-          const index = nearestObject(p, 18);
-          if (index >= 0) {
-            setObjects(prev => prev.filter((_, idx) => idx !== index));
-            setSelectedId(null);
-          }
-          return;
-        }
-
-        if (tool === 'select') {
-          const index = nearestObject(p, 22);
-          setSelectedId(index >= 0 ? index : null);
-          return;
-        }
-
-        if (tool === 'freehand') {
-          setDrawing({ type: 'freehand', color, points: [p] });
-          return;
-        }
-
-        if (['pass', 'run', 'line'].includes(tool)) {
-          setDrawing({ type: tool, color, sx: p.x, sy: p.y, ex: p.x, ey: p.y });
-          return;
-        }
-
-        if (tool === 'player') {
-          const label = window.prompt('Player label or number:', '7') || '7';
-          addObject({ type: 'player', x: p.x, y: p.y, label, color });
-          return;
-        }
-
-        if (tool === 'marker') {
-          addObject({ type: 'marker', x: p.x, y: p.y, color });
-          return;
-        }
-
-        if (tool === 'ball') {
-          addObject({ type: 'ball', x: p.x, y: p.y, color });
-          return;
-        }
-
-        if (tool === 'cone') {
-          addObject({ type: 'cone', x: p.x, y: p.y, color });
-          return;
-        }
-      }
-
-      function pointerMove(event) {
-        if (!drawing) return;
-        const p = pointFromEvent(event);
-        setDrawing(prev => {
-          if (!prev) return prev;
-          if (prev.type === 'freehand') {
-            return { ...prev, points: [...prev.points, p] };
-          }
-          return { ...prev, ex: p.x, ey: p.y };
-        });
-      }
-
-      function pointerUp() {
-        if (!drawing) return;
-        setObjects(prev => [...prev, drawing]);
-        setDrawing(null);
-      }
-
-      useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        canvas.addEventListener('pointerdown', pointerDown);
-        canvas.addEventListener('pointermove', pointerMove);
-        window.addEventListener('pointerup', pointerUp);
-        return () => {
-          canvas.removeEventListener('pointerdown', pointerDown);
-          canvas.removeEventListener('pointermove', pointerMove);
-          window.removeEventListener('pointerup', pointerUp);
-        };
-      }, [tool, drawing, color, objects]);
-
-      return (
-        <div className="bg-slate-900 rounded-2xl p-3 text-white shadow-xl">
-          <div className="flex flex-wrap gap-2 mb-3 print:hidden">
-            <select
-              value={zoneMode}
-              onChange={e => setZoneMode(e.target.value)}
-              className="bg-slate-700 text-white rounded px-2 py-2 text-xs font-bold outline-none"
-            >
-              <option value="traditional">Traditional thirds</option>
-              <option value="halfspaces">Half spaces</option>
-            </select>
-
-            {['select', 'player', 'ball', 'marker', 'cone', 'pass', 'run', 'line', 'freehand', 'erase'].map(toolName => (
-              <button
-                key={toolName}
-                type="button"
-                onClick={() => setTool(toolName)}
-                className={`px-2.5 py-2 rounded text-[11px] font-bold ${tool === toolName ? 'bg-yellow-400 text-slate-900' : 'bg-slate-700 hover:bg-slate-600'}`}
-              >
-                {toolName === 'select' ? 'Select' :
-                 toolName === 'player' ? 'Player' :
-                 toolName === 'ball' ? 'Ball' :
-                 toolName === 'marker' ? 'Marker' :
-                 toolName === 'cone' ? 'Cone' :
-                 toolName === 'pass' ? 'Pass' :
-                 toolName === 'run' ? 'Run' :
-                 toolName === 'line' ? 'Line' :
-                 toolName === 'freehand' ? 'Hand scan' : 'Erase'}
-              </button>
-            ))}
-
-            <input
-              type="color"
-              value={color}
-              onChange={e => setColor(e.target.value)}
-              className="h-9 w-9 rounded border border-white/20 bg-transparent"
-              aria-label="marker color"
-            />
-
-            <button
-              type="button"
-              onClick={() => setObjects([])}
-              className="px-2.5 py-2 rounded bg-red-700 text-[11px] font-bold hover:bg-red-600"
-            >
-              Clear board
-            </button>
-          </div>
-
-          <div className="relative overflow-hidden rounded-xl pitch-grid" style={{ backgroundColor: '#166534' }}>
-            <div className="absolute inset-0 pointer-events-none">
-              {zones.map(zone => (
-                <div
-                  key={zone.id}
-                  style={{
-                    position: 'absolute',
-                    left: `${zone.x}%`,
-                    top: `${zone.y}%`,
-                    width: `${zone.w}%`,
-                    height: `${zone.h}%`,
-                    background: zone.color,
-                    opacity: 0.14,
-                    borderRight: zone.x < 99 ? '1px solid rgba(255,255,255,0.45)' : 'none'
-                  }}
-                >
-                  <div className="flex h-full items-center justify-center text-[9px] font-black tracking-[0.18em] text-white/70 select-none">
-                    {zone.short}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <canvas ref={canvasRef} width={560} height={320} className="relative block w-full h-auto touch-none cursor-crosshair" />
-          </div>
-
-          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-300">
-            <span>{tool === 'freehand' ? 'Draw the movement scan directly on the pitch.' : 'Use the selected tool to build patterns, player markers, or key actions.'}</span>
-            <span>{objects.length} marks</span>
-          </div>
-        </div>
-      );
-    }
-
-    function App() {
-      const [store, setStore] = useState(() => loadStore());
-      const [view, setView] = useState('session');
-      const [zoneMode, setZoneMode] = useState(store.zoneMode || 'traditional');
-      const [toast, setToast] = useState('');
-      const [session, setSession] = useState(store.session || DEFAULT_SESSION);
-
-      useEffect(() => {
-        setStore(prev => ({ ...prev, zoneMode, session }));
-      }, [zoneMode, session]);
-
-      useEffect(() => {
-        localStorage.setItem(STORAGE, JSON.stringify({ zoneMode, session }));
-      }, [zoneMode, session]);
-
-      useEffect(() => {
-        if (!toast) return;
-        const timeout = setTimeout(() => setToast(''), 1800);
-        return () => clearTimeout(timeout);
-      }, [toast]);
-
-      const updateSession = (key, value) => {
-        setSession(prev => ({ ...prev, [key]: value }));
-      };
-
-      const updateActivity = (index, field, value) => {
-        setSession(prev => ({
-          ...prev,
-          activities: prev.activities.map((activity, i) => i === index ? { ...activity, [field]: value } : activity)
-        }));
-      };
-
-      const addActivity = () => {
-        setSession(prev => ({
-          ...prev,
-          activities: [...prev.activities, { title: `Activity ${prev.activities.length + 1}`, explanation: '' }]
-        }));
-      };
-
-      const saveNow = () => {
-        setToast('Session saved locally');
-      };
-
-      return (
-        <main className="max-w-7xl mx-auto p-4 sm:p-6">
-          <header className="bg-white rounded-2xl border-2 border-slate-900 shadow-xl p-4 sm:p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight">{session.clubName}</h1>
-              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-slate-500">Pro Session Planner & Club Suite</p>
-            </div>
-
-            <nav className="flex flex-wrap gap-2 print:hidden">
-              {['session', 'zones', 'notes'].map(tab => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setView(tab)}
-                  className={`rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] ${view === tab ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                >
-                  {tab === 'session' ? 'Session' : tab === 'zones' ? 'Field zones' : 'Coach notes'}
-                </button>
-              ))}
-
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white hover:bg-blue-500"
-              >
-                Print
-              </button>
-            </nav>
-          </header>
-
-          {toast && (
-            <div className="fixed right-4 top-4 z-50 rounded-lg bg-emerald-600 text-white px-4 py-3 text-sm font-bold shadow-lg">
-              {toast}
-            </div>
-          )}
-
-          {view === 'session' && (
-            <div className="space-y-6">
-              <Panel title="Session details" subtitle="Club planning">
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <input
-                    value={session.clubName}
-                    onChange={e => updateSession('clubName', e.target.value)}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold sm:col-span-2"
-                    placeholder="Club / academy"
-                  />
-                  <input
-                    value={session.team}
-                    onChange={e => updateSession('team', e.target.value)}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Team"
-                  />
-                  <input
-                    type="date"
-                    value={session.date}
-                    onChange={e => updateSession('date', e.target.value)}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div className="mt-4 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
-                  <div>
-                    <label className="block text-[11px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2">Session focus</label>
-                    <textarea
-                      value={session.focus}
-                      onChange={e => updateSession('focus', e.target.value)}
-                      className="w-full min-h-[110px] rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2">Key objective</label>
-                    <textarea
-                      value={session.objectives}
-                      onChange={e => updateSession('objectives', e.target.value)}
-                      className="w-full min-h-[110px] rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {session.tags.map((tag, index) => (
-                    <span key={index} className="rounded-full bg-slate-100 border border-slate-300 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="mt-5 flex gap-3">
-                  <button type="button" onClick={saveNow} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500">Save session</button>
-                  <button type="button" onClick={() => setSession(prev => ({ ...prev, tags: [...prev.tags, 'New focus'] }))} className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-bold text-slate-800 hover:bg-slate-300">Add tag</button>
-                </div>
-              </Panel>
-
-              <Panel title="Training blocks" subtitle="Session plan">
-                <div className="grid gap-4 lg:grid-cols-3">
-                  {session.activities.map((activity, index) => (
-                    <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <input
-                        value={activity.title}
-                        onChange={e => updateActivity(index, 'title', e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm font-black mb-2"
-                      />
-                      <textarea
-                        value={activity.explanation}
-                        onChange={e => updateActivity(index, 'explanation', e.target.value)}
-                        className="w-full min-h-[150px] rounded-lg border border-slate-300 px-2 py-2 text-sm"
-                        placeholder="Detail the activity and key coaching points..."
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <button type="button" onClick={addActivity} className="mt-5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-700">Add activity</button>
-              </Panel>
-            </div>
-          )}
-
-          {view === 'zones' && (
-            <div className="space-y-6">
-              <Panel title="Pitch planning board" subtitle="Traditional thirds + half spaces">
-                <Field zoneMode={zoneMode} setZoneMode={setZoneMode} />
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {zoneSets[zoneMode].map(zone => (
-                    <div key={zone.id} className="rounded-xl border-l-4 p-3" style={{ borderColor: zone.color }}>
-                      <div className="text-sm font-black uppercase">{zone.label}</div>
-                      <div className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">{zone.short}</div>
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-            </div>
-          )}
-
-          {view === 'notes' && (
-            <div className="space-y-6">
-              <Panel title="Coach notes" subtitle="Session summary">
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">Game model</div>
-                    <textarea
-                      value={session.focus}
-                      onChange={e => updateSession('focus', e.target.value)}
-                      className="min-h-[180px] w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">Coaching cues</div>
-                    <ul className="space-y-2 text-sm text-slate-700">
-                      <li>• Check body shape before the first pass.</li>
-                      <li>• Attack the half-spaces with the 6 and 10 between the lines.</li>
-                      <li>• Keep width on the back side of the ball in build-up.</li>
-                      <li>• Trigger pressing when the ball is on the far side.</li>
-                    </ul>
-                  </div>
-                </div>
-              </Panel>
-            </div>
-          )}
-        </main>
-      );
-    }
-
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-  </script>
+<div id="root"></div>
+<script type="text/babel">
+const {useEffect,useMemo,useRef,useState}=React;
+const STORAGE='pro_coach_board_v22';
+const clone=v=>JSON.parse(JSON.stringify(v));
+const ZONES={
+  thirds:[
+    {id:'def',label:'Defensive third',short:'DEFENSIVE',x:0,w:33.333,color:'#2563eb'},
+    {id:'mid',label:'Middle third',short:'MIDDLE',x:33.333,w:33.334,color:'#16a34a'},
+    {id:'att',label:'Attacking third',short:'ATTACKING',x:66.667,w:33.333,color:'#dc2626'}
+  ],
+  lanes:[
+    {id:'lw',label:'Left wide channel',short:'LEFT WIDE',x:0,w:16.667,color:'#0ea5e9'},
+    {id:'lh',label:'Left half-space',short:'LEFT HALF',x:16.667,w:16.667,color:'#8b5cf6'},
+    {id:'c',label:'Central lane',short:'CENTRAL',x:33.333,w:33.334,color:'#16a34a'},
+    {id:'rh',label:'Right half-space',short:'RIGHT HALF',x:66.667,w:16.667,color:'#8b5cf6'},
+    {id:'rw',label:'Right wide channel',short:'RIGHT WIDE',x:83.333,w:16.667,color:'#0ea5e9'}
+  ]
+};
+const FORMATIONS={
+  '4-3-3':[['GK',8,50],['RB',24,18],['RCB',20,38],['LCB',20,62],['LB',24,82],['6',43,50],['8',48,27],['10',48,73],['RW',70,18],['9',78,50],['LW',70,82]],
+  '4-2-3-1':[['GK',8,50],['RB',24,18],['RCB',20,38],['LCB',20,62],['LB',24,82],['6',40,38],['8',40,62],['RW',61,18],['10',57,50],['LW',61,82],['9',79,50]],
+  '3-4-3':[['GK',8,50],['RCB',20,30],['CB',20,50],['LCB',20,70],['RWB',43,12],['6',42,39],['8',42,61],['LWB',43,88],['RW',68,20],['9',80,50],['LW',68,80]]
+};
+const DEFAULT_SESSION={
+  title:'Match Day / Training Session',club:'ACADEMY & CLUB DEVELOPMENT SUITE',team:'',date:'',opponent:'',venue:'',kickoff:'',formation:'4-3-3',zoneMode:'lanes',focus:'Build through the half-spaces and press immediately after loss.',objectives:'',coachNotes:'',matchPlan:'',tags:['Half-space access','Pressing triggers','Width & depth'],checks:{build:false,press:false,rest:false,transitions:false,standards:false},marks:[],activities:[
+    {title:'Activation & Rondo',duration:'15 min',objective:'Receive side-on; scan before the ball arrives.',detail:''},
+    {title:'Build-up / Positional Play',duration:'25 min',objective:'Create a free player in the half-space.',detail:''},
+    {title:'Pressing & Transition Game',duration:'25 min',objective:'Win the ball back within six seconds.',detail:''},
+    {title:'Conditioned Match',duration:'25 min',objective:'Transfer the theme into realistic decisions.',detail:''}
+  ]
+};
+const TEMPLATES=[
+  {name:'Match day 4-3-3',patch:{title:'Match Day Plan',formation:'4-3-3',zoneMode:'lanes',focus:'Control the central lane, access both half-spaces, and counter-press on loss.',objectives:'In possession: create width, find the 8/10 between lines, attack the box with five.\nOut of possession: lock the ball-side half-space and force play wide.',matchPlan:'First 15 minutes: secure the ball and test the opponent fullback.\nIf leading: protect the central lane and counter through the wide channel.\nIf chasing: add a second striker and attack the far post.'}},
+  {name:'High press session',patch:{title:'High Pressing Principles',formation:'4-2-3-1',zoneMode:'thirds',focus:'Press on poor body shape, backward passes, and passes into the touchline.',objectives:'Trigger: backwards pass or bouncing ball.\nCover shadow: screen the 6.\nSecond action: recover compactly if the first press is broken.',matchPlan:'Use the near-side winger to lock the fullback and the 10 to screen the pivot.'}},
+  {name:'Build-up session',patch:{title:'Build Through Half-Spaces',formation:'3-4-3',zoneMode:'lanes',focus:'Disorganise the first line, attract pressure, then penetrate the half-space.',objectives:'GK + back three create the first line.\nMidfielders rotate to open the central lane.\nWingbacks provide maximum width.',matchPlan:'Progress with the third player; avoid forcing the first forward pass.'}}
+];
+function load(){try{return JSON.parse(localStorage.getItem(STORAGE))||{}}catch{return {}}}
+function Btn({children,onClick,active=false,tone='slate',className=''}){return <button type="button" onClick={onClick} className={`rounded-lg px-3 py-2 text-xs font-bold transition ${active?`bg-${tone}-600 text-white`:'bg-slate-100 text-slate-700 hover:bg-slate-200'} ${className}`}>{children}</button>}
+function Panel({title,subtitle,children,className=''}){return <section className={`rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-xl sm:p-7 ${className}`}><h2 className="mb-1 text-xl font-black uppercase tracking-tight">{title}</h2>{subtitle&&<p className="mb-4 text-[10px] font-black uppercase tracking-[.22em] text-slate-500">{subtitle}</p>}{children}</section>}
+function Checklist({session,setSession}){const items=[['build','Build-up / possession'],['press','Pressing triggers'],['rest','Rest defence'],['transitions','Transition reactions'],['standards','Set pieces / restarts']];return <div className="space-y-2">{items.map(([id,label])=><label key={id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold"><input type="checkbox" checked={!!session.checks[id]} onChange={e=>setSession(s=>({...s,checks:{...s.checks,[id]:e.target.checked}}))} className="h-4 w-4 accent-emerald-600"/>{label}</label>)}</div>}
+function Board({session,setSession}){
+  const ref=useRef(null),[tool,setTool]=useState('select'),[color,setColor]=useState('#facc15'),[drawing,setDrawing]=useState(null),[selected,setSelected]=useState(-1);
+  const zones=ZONES[session.zoneMode==='thirds'?'thirds':'lanes'];
+  const p=e=>{const r=ref.current.getBoundingClientRect();return{x:(e.clientX-r.left)*560/r.width,y:(e.clientY-r.top)*320/r.height}};
+  const nearest=q=>{let ix=-1,d=22;(session.marks||[]).forEach((o,i)=>{const x=o.x??o.sx,y=o.y??o.sy,dd=Math.hypot(x-q.x,y-q.y);if(dd<d){d=dd;ix=i}});return ix};
+  const add=o=>setSession(s=>({...s,marks:[...(s.marks||[]),o]}));
+  const down=e=>{const q=p(e);if(tool==='erase'){const i=nearest(q);if(i>=0)setSession(s=>({...s,marks:s.marks.filter((_,n)=>n!==i)}));return}if(tool==='select'){setSelected(nearest(q));return}if(tool==='player'){add({type:'player',x:q.x,y:q.y,label:prompt('Player number or label','7')||'7',color});return}if(['ball','cone','marker'].includes(tool)){add({type:tool,x:q.x,y:q.y,color});return}if(tool==='freehand'){setDrawing({type:'freehand',points:[q],color});return}if(['pass','run','line'].includes(tool))setDrawing({type:tool,sx:q.x,sy:q.y,ex:q.x,ey:q.y,color})};
+  const move=e=>{if(!drawing)return;const q=p(e);setDrawing(d=>d.type==='freehand'?({...d,points:[...d.points,q]}):({...d,ex:q.x,ey:q.y}))};
+  const up=()=>{if(drawing){add(drawing);setDrawing(null)}};
+  useEffect(()=>{const c=ref.current;if(!c)return;c.addEventListener('pointerdown',down);c.addEventListener('pointermove',move);window.addEventListener('pointerup',up);return()=>{c.removeEventListener('pointerdown',down);c.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)}},[tool,drawing,session.marks,color]);
+  useEffect(()=>{const c=ref.current;if(!c)return;const x=c.getContext('2d');x.clearRect(0,0,560,320);x.fillStyle='#166534';x.fillRect(0,0,560,320);x.strokeStyle='rgba(255,255,255,.9)';x.lineWidth=2;x.strokeRect(8,8,544,304);x.beginPath();x.moveTo(280,8);x.lineTo(280,312);x.stroke();x.beginPath();x.arc(280,160,45,0,Math.PI*2);x.stroke();x.strokeRect(8,105,72,110);x.strokeRect(480,105,72,110);x.strokeRect(8,135,25,50);x.strokeRect(527,135,25,50);
+    const marks=[...(session.marks||[]),...(drawing?[drawing]:[])];marks.forEach((o,i)=>{x.save();x.strokeStyle=i===selected?'#fff':o.color||'#fff';x.fillStyle=o.color||'#fff';x.lineWidth=i===selected?5:3;x.lineCap='round';if(['pass','run','line'].includes(o.type)){x.setLineDash(o.type==='pass'?[8,5]:o.type==='run'?[3,5]:[]);x.beginPath();x.moveTo(o.sx,o.sy);x.lineTo(o.ex,o.ey);x.stroke();x.setLineDash([]);const a=Math.atan2(o.ey-o.sy,o.ex-o.sx);x.beginPath();x.moveTo(o.ex,o.ey);x.lineTo(o.ex-10*Math.cos(a-.5),o.ey-10*Math.sin(a-.5));x.lineTo(o.ex-10*Math.cos(a+.5),o.ey-10*Math.sin(a+.5));x.closePath();x.fill()}else if(o.type==='freehand'){x.beginPath();o.points.forEach((z,n)=>n?x.lineTo(z.x,z.y):x.moveTo(z.x,z.y));x.stroke()}else if(o.type==='player'){x.beginPath();x.arc(o.x,o.y,11,0,Math.PI*2);x.fill();x.fillStyle='#111827';x.font='bold 10px sans-serif';x.textAlign='center';x.fillText(o.label,o.x,o.y+4)}else if(o.type==='cone'){x.beginPath();x.moveTo(o.x,o.y-9);x.lineTo(o.x-8,o.y+8);x.lineTo(o.x+8,o.y+8);x.closePath();x.fill()}else{x.beginPath();x.arc(o.x,o.y,o.type==='ball'?6:8,0,Math.PI*2);x.fill()}x.restore()})},[session.marks,drawing,selected,session.zoneMode]);
+  const tools=[['select','Select'],['player','Player'],['ball','Ball'],['cone','Cone'],['marker','Marker'],['pass','Pass'],['run','Run'],['line','Line'],['freehand','Hand scan'],['erase','Erase']];
+  return <div className="rounded-2xl bg-slate-900 p-3 text-white shadow-xl"><div className="mb-3 flex flex-wrap gap-2 print:hidden"><select value={session.zoneMode} onChange={e=>setSession(s=>({...s,zoneMode:e.target.value}))} className="rounded bg-slate-700 px-2 py-2 text-xs font-bold"><option value="lanes">Half-space lanes</option><option value="thirds">Traditional thirds</option></select>{tools.map(([id,label])=><Btn key={id} onClick={()=>setTool(id)} active={tool===id} className={tool===id?'bg-yellow-400 text-slate-900':''}>{label}</Btn>)}<input type="color" value={color} onChange={e=>setColor(e.target.value)} className="h-8 w-9"/><Btn onClick={()=>setSession(s=>({...s,marks:[]}))} className="bg-red-700 text-white hover:bg-red-600">Clear</Btn></div><div className="relative overflow-hidden rounded-xl bg-green-800"><div className="pointer-events-none absolute inset-0">{zones.map(z=><div key={z.id} style={{position:'absolute',left:`${z.x}%`,width:`${z.w}%`,top:0,height:'100%',background:z.color,opacity:.14,borderRight:'1px solid rgba(255,255,255,.4)'}}><div className="flex h-full items-center justify-center text-[8px] font-black tracking-widest text-white/70">{z.short}</div></div>)}</div><canvas ref={ref} width="560" height="320" className="relative block h-auto w-full touch-none cursor-crosshair"/></div><div className="mt-2 flex justify-between text-[10px] text-slate-300"><span>{tool==='freehand'?'Draw your scan directly on the pitch.':'Add formation players, actions, and coaching detail.'}</span><span>{(session.marks||[]).length} marks</span></div></div>
+}
+function Formation({session,setSession}){const positions=FORMATIONS[session.formation]||FORMATIONS['4-3-3'];return <div className="relative aspect-[1.65] overflow-hidden rounded-xl border-2 border-white/60 bg-green-800 shadow-inner"><div className="absolute inset-2 border-2 border-white/70"><div className="absolute inset-y-0 left-1/2 border-l-2 border-white/70"/><div className="absolute left-1/2 top-1/2 h-1/4 w-[14%] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/70"/><div className="absolute left-0 top-1/4 h-1/2 w-[13%] border-2 border-white/70"/><div className="absolute right-0 top-1/4 h-1/2 w-[13%] border-2 border-white/70"/>{positions.map(([label,x,y])=><div key={label} className="absolute -translate-x-1/2 -translate-y-1/2" style={{left:`${x}%`,top:`${y}%`}}><div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-red-600 text-[9px] font-black shadow">{label}</div></div>)}</div></div>}
+function App(){const saved=load();const [session,setSession]=useState(saved.session||DEFAULT_SESSION);const [templates,setTemplates]=useState(saved.templates||[]);const [view,setView]=useState('board');const [toast,setToast]=useState('');useEffect(()=>localStorage.setItem(STORAGE,JSON.stringify({session,templates})),[session,templates]);useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),1800);return()=>clearTimeout(t)},[toast]);const update=(k,v)=>setSession(s=>({...s,[k]:v}));const activity=(i,k,v)=>setSession(s=>({...s,activities:s.activities.map((a,n)=>n===i?{...a,[k]:v}:a)}));const applyTemplate=t=>{setSession(s=>({...s,...clone(t.patch),checks:{...s.checks},marks:[]}));setToast(`${t.name} loaded`)};const saveTemplate=()=>{const name=prompt('Template name','My coach template');if(name)setTemplates(x=>[...x,{name,patch:clone(session)}]);setToast('Template saved')};const reset=()=>{if(confirm('Reset this session?'))setSession(clone(DEFAULT_SESSION))};return <main className="mx-auto max-w-7xl p-4 sm:p-6"><header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-xl"><div><h1 className="text-2xl font-black uppercase tracking-tight sm:text-3xl">{session.club||'Coach Board'}</h1><p className="text-[10px] font-black uppercase tracking-[.28em] text-slate-500">Session planner · Match day coach board</p></div><nav className="flex flex-wrap gap-2 print:hidden">{[['board','Coach board'],['session','Session plan'],['match','Match day'],['templates','Templates']].map(([id,label])=><Btn key={id} onClick={()=>setView(id)} active={view===id}>{label}</Btn>)}<Btn onClick={()=>window.print()} className="bg-blue-600 text-white hover:bg-blue-500">Print / PDF</Btn></nav></header>{toast&&<div className="fixed right-4 top-4 z-50 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-xl">{toast}</div>}
+{view==='board'&&<div className="grid gap-6 lg:grid-cols-[1fr_320px]"><Panel title="Tactical board" subtitle="Plan · explain · communicate"><Board session={session} setSession={setSession}/><div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-slate-50 p-3"><b className="text-xs uppercase">Theme</b><p className="mt-1 text-sm">{session.focus}</p></div><div className="rounded-xl bg-slate-50 p-3"><b className="text-xs uppercase">Formation</b><p className="mt-1 text-sm">{session.formation}</p></div><div className="rounded-xl bg-slate-50 p-3"><b className="text-xs uppercase">Opponent</b><p className="mt-1 text-sm">{session.opponent||'Not set'}</p></div></div></Panel><div className="space-y-6"><Panel title="Match checklist" subtitle="Before / during / after"><Checklist session={session} setSession={setSession}/></Panel><Panel title="Coach cues" subtitle="Quick reference"><ul className="space-y-2 text-xs font-semibold text-slate-700"><li>• Scan before receiving.</li><li>• Fix the opponent with width.</li><li>• Find the free player in the half-space.</li><li>• Counter-press the first five seconds.</li><li>• Protect the central lane behind the ball.</li></ul></Panel></div></div>}
+{view==='session'&&<div className="space-y-6"><Panel title="Session plan" subtitle="Training detail and objective template"><div className="grid gap-3 sm:grid-cols-4"><input value={session.title} onChange={e=>update('title',e.target.value)} className="rounded-lg border p-2 text-sm font-bold sm:col-span-2" placeholder="Session title"/><input value={session.team} onChange={e=>update('team',e.target.value)} className="rounded-lg border p-2 text-sm" placeholder="Team"/><input type="date" value={session.date} onChange={e=>update('date',e.target.value)} className="rounded-lg border p-2 text-sm"/></div><div className="mt-4 grid gap-4 lg:grid-cols-2"><label className="text-xs font-black uppercase">Tactical focus<textarea value={session.focus} onChange={e=>update('focus',e.target.value)} className="mt-1 min-h-24 w-full rounded-lg border p-2 text-sm"/></label><label className="text-xs font-black uppercase">Objective template<textarea value={session.objectives} onChange={e=>update('objectives',e.target.value)} placeholder="In possession... Out of possession... Transition... Set pieces..." className="mt-1 min-h-24 w-full rounded-lg border p-2 text-sm"/></label></div></Panel><Panel title="Training blocks" subtitle="Objective · duration · coaching detail"><div className="grid gap-4 lg:grid-cols-2">{session.activities.map((a,i)=><div key={i} className="rounded-xl border bg-slate-50 p-4"><div className="grid gap-2 sm:grid-cols-[1fr_100px]"><input value={a.title} onChange={e=>activity(i,'title',e.target.value)} className="rounded border p-2 text-sm font-black"/><input value={a.duration} onChange={e=>activity(i,'duration',e.target.value)} className="rounded border p-2 text-sm"/></div><input value={a.objective} onChange={e=>activity(i,'objective',e.target.value)} className="mt-2 w-full rounded border p-2 text-sm" placeholder="Tactical objective"/><textarea value={a.detail} onChange={e=>activity(i,'detail',e.target.value)} className="mt-2 min-h-24 w-full rounded border p-2 text-sm" placeholder="Organisation, conditions, coaching points, progression..."/></div>)}</div><button type="button" onClick={()=>setSession(s=>({...s,activities:[...s.activities,{title:`Activity ${s.activities.length+1}`,duration:'',objective:'',detail:''}]}))} className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">Add activity</button></Panel></div>}
+{view==='match'&&<div className="grid gap-6 lg:grid-cols-[1fr_360px]"><Panel title="Match day board" subtitle="Starting structure and match plan"><div className="mb-4 grid gap-3 sm:grid-cols-3"><input value={session.opponent} onChange={e=>update('opponent',e.target.value)} className="rounded border p-2 text-sm" placeholder="Opponent"/><input value={session.venue} onChange={e=>update('venue',e.target.value)} className="rounded border p-2 text-sm" placeholder="Venue"/><input value={session.kickoff} onChange={e=>update('kickoff',e.target.value)} className="rounded border p-2 text-sm" placeholder="Kick-off"/></div><div className="mb-4 flex items-center gap-3"><label className="text-xs font-black uppercase">Formation<select value={session.formation} onChange={e=>update('formation',e.target.value)} className="ml-2 rounded border p-2 text-sm">{Object.keys(FORMATIONS).map(f=><option key={f}>{f}</option>)}</select></label></div><Formation session={session} setSession={setSession}/></Panel><div className="space-y-6"><Panel title="Match plan" subtitle="Scenario notes"><textarea value={session.matchPlan} onChange={e=>update('matchPlan',e.target.value)} className="min-h-52 w-full rounded-lg border p-3 text-sm" placeholder="First 15 minutes... If leading... If chasing... Substitutions..."/></Panel><Panel title="Match checklist"><Checklist session={session} setSession={setSession}/></Panel></div></div>}
+{view==='templates'&&<div className="grid gap-6 lg:grid-cols-2"><Panel title="Built-in templates" subtitle="Start quickly"><div className="space-y-3">{TEMPLATES.map(t=><div key={t.name} className="flex items-center justify-between rounded-xl border bg-slate-50 p-3"><div><b className="text-sm">{t.name}</b><p className="text-xs text-slate-500">{t.patch.formation} · {t.patch.zoneMode==='lanes'?'half spaces':'thirds'}</p></div><Btn onClick={()=>applyTemplate(t)}>Load</Btn></div>)}</div></Panel><Panel title="My templates" subtitle="Reusable club language"><div className="mb-4 flex gap-2"><Btn onClick={saveTemplate} className="bg-emerald-600 text-white hover:bg-emerald-500">Save current as template</Btn><Btn onClick={reset}>Reset session</Btn></div>{templates.length===0?<p className="text-sm italic text-slate-500">No saved templates yet.</p>:<div className="space-y-2">{templates.map((t,i)=><div key={i} className="flex items-center justify-between rounded-lg border p-3"><span className="text-sm font-bold">{t.name}</span><Btn onClick={()=>applyTemplate(t)}>Load</Btn></div>)}</div>}</Panel></div>}
+<footer className="mt-6 flex flex-wrap justify-between gap-3 text-[10px] font-bold uppercase tracking-[.18em] text-slate-500 print:hidden"><span>Local autosave enabled</span><span>Print / PDF uses your browser print dialog</span></footer></main>}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
 </body>
 </html>
