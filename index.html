@@ -9,54 +9,599 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
-    @media print { .print\:hidden { display:none!important } body { background:#fff!important } }
-    * { box-sizing:border-box }
+    @media print {
+      body { background:#fff !important; color:#0f172a !important; }
+      .print\:hidden { display:none !important; }
+      .print\:shadow-none { box-shadow:none !important; }
+      .print\:border-none { border:none !important; }
+      .print\:bg-slate-800 { background:#1e293b !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      .print\:bg-red-900 { background:#7f1d1d !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      .hide-print { display:none !important; }
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; }
+    .pitch-grid {
+      background:
+        linear-gradient(rgba(255,255,255,0.04), rgba(255,255,255,0.04)),
+        radial-gradient(circle at center, rgba(255,255,255,0.06), rgba(0,0,0,0.05));
+    }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-900 font-sans antialiased">
-<div id="root"></div>
-<script type="text/babel">
-const {useEffect,useRef,useState}=React;
-const STORAGE='pro_soccer_planner_v20';
-const zoneSets={
-  traditional:[
-    {id:'defensive',label:'Defensive third',short:'DEFENSIVE THIRD',x:0,y:0,w:33.333,h:100,color:'#2563eb'},
-    {id:'middle',label:'Middle third',short:'MIDDLE THIRD',x:33.333,y:0,w:33.334,h:100,color:'#16a34a'},
-    {id:'attacking',label:'Attacking third',short:'ATTACKING THIRD',x:66.667,y:0,w:33.333,h:100,color:'#dc2626'}
-  ],
-  halfspaces:[
-    {id:'left-wide',label:'Left wide channel',short:'LEFT WIDE',x:0,y:0,w:16.667,h:100,color:'#0ea5e9'},
-    {id:'left-half',label:'Left half-space',short:'LEFT HALF-SPACE',x:16.667,y:0,w:16.667,h:100,color:'#8b5cf6'},
-    {id:'central',label:'Central lane',short:'CENTRAL',x:33.333,y:0,w:33.334,h:100,color:'#16a34a'},
-    {id:'right-half',label:'Right half-space',short:'RIGHT HALF-SPACE',x:66.667,y:0,w:16.667,h:100,color:'#8b5cf6'},
-    {id:'right-wide',label:'Right wide channel',short:'RIGHT WIDE',x:83.333,y:0,w:16.667,h:100,color:'#0ea5e9'}
-  ]
-};
-function Field({zoneMode,setZoneMode}){
-  const canvas=useRef(null), [tool,setTool]=useState('select'), [objects,setObjects]=useState([]), [drawing,setDrawing]=useState(null), [selected,setSelected]=useState(null), [color,setColor]=useState('#facc15');
-  const zones=zoneSets[zoneMode];
-  const point=e=>{const r=canvas.current.getBoundingClientRect();return {x:(e.clientX-r.left)*560/r.width,y:(e.clientY-r.top)*320/r.height}};
-  const redraw=()=>{const c=canvas.current;if(!c)return;const x=c.getContext('2d');x.clearRect(0,0,560,320);x.fillStyle='#166534';x.fillRect(0,0,560,320);
-    x.strokeStyle='rgba(255,255,255,.85)';x.lineWidth=2;x.strokeRect(8,8,544,304);x.beginPath();x.moveTo(280,8);x.lineTo(280,312);x.stroke();x.beginPath();x.arc(280,160,45,0,Math.PI*2);x.stroke();
-    x.strokeRect(8,105,72,110);x.strokeRect(480,105,72,110);x.strokeRect(8,135,25,50);x.strokeRect(527,135,25,50);
-    objects.forEach((o,i)=>{x.save();x.strokeStyle=i===selected?'#fff':o.color||color;x.fillStyle=o.color||color;x.lineWidth=i===selected?4:3;x.lineCap='round';
-      if(o.type==='line'||o.type==='run'||o.type==='pass'){x.setLineDash(o.type==='pass'?[8,5]:o.type==='run'?[3,5]:[]);x.beginPath();x.moveTo(o.sx,o.sy);x.lineTo(o.ex,o.ey);x.stroke();x.setLineDash([]);const a=Math.atan2(o.ey-o.sy,o.ex-o.sx);x.beginPath();x.moveTo(o.ex,o.ey);x.lineTo(o.ex-10*Math.cos(a-.5),o.ey-10*Math.sin(a-.5));x.lineTo(o.ex-10*Math.cos(a+.5),o.ey-10*Math.sin(a+.5));x.closePath();x.fill();}
-      else if(o.type==='freehand'){x.beginPath();o.points.forEach((p,j)=>j?x.lineTo(p.x,p.y):x.moveTo(p.x,p.y));x.stroke();}
-      else {x.beginPath();x.arc(o.x,o.y,o.type==='cone'?7:11,0,Math.PI*2);x.fill();if(o.type==='player'){x.fillStyle='#111827';x.font='bold 10px sans-serif';x.textAlign='center';x.fillText(o.label||'',o.x,o.y+4)}} x.restore()});
-  };
-  useEffect(redraw,[objects,selected,color]);
-  const down=e=>{if(tool==='select'||tool==='erase'){const p=point(e);const idx=objects.findIndex(o=>Math.hypot((o.x??o.sx)-p.x,(o.y??o.sy)-p.y)<18);if(tool==='erase'&&idx>=0)setObjects(a=>a.filter((_,i)=>i!==idx));else setSelected(idx<0?null:idx);return}const p=point(e);if(tool==='freehand'){setDrawing({type:'freehand',points:[p],color});return}if(['pass','run','line'].includes(tool)){setDrawing({type:tool,sx:p.x,sy:p.y,ex:p.x,ey:p.y,color});return}setObjects(a=>[...a,{type:tool,x:p.x,y:p.y,color,label:tool==='player'?prompt('Player number or label:')||'':undefined}]);};
-  const move=e=>{if(!drawing)return;const p=point(e);setDrawing(d=>d.type==='freehand'?{...d,points:[...d.points,p]}:{...d,ex:p.x,ey:p.y})};
-  const up=()=>{if(drawing){setObjects(a=>[...a,drawing]);setDrawing(null)}};
-  useEffect(()=>{const c=canvas.current;if(!c)return;c.addEventListener('pointerdown',down);c.addEventListener('pointermove',move);window.addEventListener('pointerup',up);return()=>{c.removeEventListener('pointerdown',down);c.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up)}},[tool,drawing,objects,color]);
-  const shown=[...objects,...(drawing?[drawing]:[])];
-  return <div className="bg-slate-900 rounded-2xl p-3 text-white shadow-xl">
-    <div className="flex flex-wrap gap-2 mb-3 print:hidden"><select value={zoneMode} onChange={e=>setZoneMode(e.target.value)} className="bg-slate-700 rounded px-2 py-2 text-xs font-bold"><option value="traditional">Traditional thirds</option><option value="halfspaces">Half spaces</option></select>{[['select','Select'],['player','Player'],['cone','Cone'],['pass','Pass'],['run','Run'],['line','Line'],['freehand','Hand-drawn scan'],['erase','Erase']].map(([id,label])=><button type="button" key={id} onClick={()=>setTool(id)} className={`px-2.5 py-2 rounded text-xs font-bold ${tool===id?'bg-yellow-400 text-slate-900':'bg-slate-700 hover:bg-slate-600'}`}>{label}</button>)}<input aria-label="drawing colour" type="color" value={color} onChange={e=>setColor(e.target.value)} className="h-8 w-9"/><button type="button" onClick={()=>setObjects([])} className="px-2.5 py-2 rounded bg-red-700 text-xs font-bold">Clear</button></div>
-    <div className="relative overflow-hidden rounded-xl bg-green-800"><div className="absolute inset-0 grid pointer-events-none">{zones.map(z=><div key={z.id} style={{position:'absolute',left:z.x+'%',top:z.y+'%',width:z.w+'%',height:z.h+'%',background:z.color,opacity:.13,borderRight:'1px solid rgba(255,255,255,.45)'}}><span className="flex h-full items-center justify-center text-[9px] font-black tracking-wide text-white/70 [writing-mode:vertical-rl] sm:[writing-mode:horizontal-tb]">{z.short}</span></div>)}</div><canvas ref={canvas} width="560" height="320" className="relative block w-full touch-none cursor-crosshair"/></div>
-    <div className="mt-2 flex items-center justify-between text-[11px] text-slate-300"><span>{tool==='freehand'?'Draw directly on the field to scan or annotate a movement.':'Select a zone view, then add players, movements, or annotations.'}</span><span>{shown.length} marks</span></div>
-  </div>
-}
-function App(){const [data,setData]=useState(()=>{try{return JSON.parse(localStorage.getItem(STORAGE))||{}}catch{return {}}});const [tab,setTab]=useState('session');const [zoneMode,setZoneMode]=useState(data.zoneMode||'traditional');const [toast,setToast]=useState('');const [session,setSession]=useState(data.session||{clubName:'ACADEMY & CLUB DEVELOPMENT SUITE',team:'',date:'',focus:'',activities:[{title:'Activity 1',explanation:''},{title:'Activity 2',explanation:''},{title:'Activity 3',explanation:''}]});useEffect(()=>{localStorage.setItem(STORAGE,JSON.stringify({...data,zoneMode,session}))},[data,zoneMode,session]);const notify=m=>{setToast(m);setTimeout(()=>setToast(''),1800)};const update=(k,v)=>setSession(s=>({...s,[k]:v}));return <main className="max-w-6xl mx-auto p-4 sm:p-6"><header className="bg-white rounded-2xl border shadow-md p-5 mb-5 flex flex-wrap items-center justify-between gap-4"><div><h1 className="text-2xl font-black uppercase">{session.clubName}</h1><p className="text-xs font-bold text-slate-500">PRO SESSION PLANNER & CLUB SUITE</p></div><nav className="flex flex-wrap gap-2 print:hidden">{[['session','Session'],['zones','Field zones']].map(([id,label])=><button key={id} onClick={()=>setTab(id)} className={`rounded-lg px-3 py-2 text-xs font-bold ${tab===id?'bg-slate-900 text-white':'bg-slate-100 hover:bg-slate-200'}`}>{label}</button>)}<button onClick={()=>window.print()} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Print</button></nav></header>{toast&&<div className="fixed right-4 top-4 z-50 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-lg">{toast}</div>}{tab==='session'?<section className="bg-white rounded-2xl border-2 border-slate-900 p-5 sm:p-8"><div className="grid gap-3 sm:grid-cols-4 mb-6"><input value={session.clubName} onChange={e=>update('clubName',e.target.value)} className="rounded border p-2 font-bold sm:col-span-2" placeholder="Club name"/><input value={session.team} onChange={e=>update('team',e.target.value)} className="rounded border p-2" placeholder="Team"/><input type="date" value={session.date} onChange={e=>update('date',e.target.value)} className="rounded border p-2"/></div><label className="mb-2 block text-xs font-black uppercase">Session focus</label><textarea value={session.focus} onChange={e=>update('focus',e.target.value)} className="mb-6 min-h-20 w-full rounded border p-3" placeholder="Key tactical objective..."/><h2 className="mb-3 text-xl font-black uppercase">Tactical board</h2><Field zoneMode={zoneMode} setZoneMode={setZoneMode}/><div className="mt-6 grid gap-4 sm:grid-cols-3">{session.activities.map((a,i)=><div key={i} className="rounded-xl border p-4"><input value={a.title} onChange={e=>setSession(s=>({...s,activities:s.activities.map((x,n)=>n===i?{...x,title:e.target.value}:x)}))} className="mb-2 w-full rounded border p-2 font-bold"/><textarea value={a.explanation} onChange={e=>setSession(s=>({...s,activities:s.activities.map((x,n)=>n===i?{...x,explanation:e.target.value}:x)}))} className="min-h-24 w-full rounded border p-2 text-sm" placeholder="Activity details..."/></div>)}</div><button onClick={()=>notify('Session saved locally')} className="mt-6 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white">Save session</button></section>:<section className="bg-white rounded-2xl border-2 border-slate-900 p-5 sm:p-8"><h2 className="mb-2 text-xl font-black uppercase">Traditional zones & half spaces</h2><p className="mb-5 text-sm text-slate-600">Use the selector to compare the three traditional thirds with the five-lane half-space model. The hand-drawn scan tool is available on both views.</p><Field zoneMode={zoneMode} setZoneMode={setZoneMode}/><div className="mt-5 grid gap-3 sm:grid-cols-2">{zoneSets[zoneMode].map(z=><div key={z.id} className="rounded-lg border-l-4 p-3" style={{borderColor:z.color}}><b>{z.label}</b><p className="text-xs text-slate-500">Tactical reference zone for planning and annotation.</p></div>)}</div></section>}</main>};ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-</script>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useEffect, useMemo, useRef, useState } = React;
+
+    const STORAGE = 'pro_soccer_planner_v21';
+
+    const zoneSets = {
+      traditional: [
+        { id: 'defensive', label: 'Defensive third', short: 'DEFENSIVE THIRD', x: 0, y: 0, w: 33.333, h: 100, color: '#2563eb' },
+        { id: 'middle', label: 'Middle third', short: 'MIDDLE THIRD', x: 33.333, y: 0, w: 33.334, h: 100, color: '#16a34a' },
+        { id: 'attacking', label: 'Attacking third', short: 'ATTACKING THIRD', x: 66.667, y: 0, w: 33.333, h: 100, color: '#dc2626' }
+      ],
+      halfspaces: [
+        { id: 'left-wide', label: 'Left wide channel', short: 'LEFT WIDE', x: 0, y: 0, w: 16.667, h: 100, color: '#0ea5e9' },
+        { id: 'left-half', label: 'Left half-space', short: 'LEFT HALF-SPACE', x: 16.667, y: 0, w: 16.667, h: 100, color: '#8b5cf6' },
+        { id: 'central', label: 'Central lane', short: 'CENTRAL', x: 33.333, y: 0, w: 33.334, h: 100, color: '#16a34a' },
+        { id: 'right-half', label: 'Right half-space', short: 'RIGHT HALF-SPACE', x: 66.667, y: 0, w: 16.667, h: 100, color: '#8b5cf6' },
+        { id: 'right-wide', label: 'Right wide channel', short: 'RIGHT WIDE', x: 83.333, y: 0, w: 16.667, h: 100, color: '#0ea5e9' }
+      ]
+    };
+
+    const DEFAULT_SESSION = {
+      clubName: 'ACADEMY & CLUB DEVELOPMENT SUITE',
+      team: '',
+      date: '',
+      focus: 'Build phase: break lines, create half-space access, and attack with positive width.',
+      objectives: 'Press high, trigger inside the central lane, and use the wide channels as progression routes.',
+      activities: [
+        { title: 'Activity 1', explanation: 'Rondo and technical activation to prepare the receiving angles.' },
+        { title: 'Activity 2', explanation: 'Build-up pattern with 6 and 8 linking into the half-space.' },
+        { title: 'Activity 3', explanation: 'Progression drill with final-third entries and finishing.' }
+      ],
+      tags: ['Press triggers', 'Half-space access', 'Body shape', 'Three-stage build']
+    };
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function loadStore() {
+      try {
+        const raw = localStorage.getItem(STORAGE);
+        return raw ? JSON.parse(raw) : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function Panel({ title, subtitle, children, className = '' }) {
+      return (
+        <section className={`bg-white border-2 border-slate-900 rounded-2xl shadow-xl p-5 sm:p-7 ${className}`}>
+          <h2 className="text-xl font-black uppercase tracking-tight mb-1">{title}</h2>
+          {subtitle && <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-4">{subtitle}</p>}
+          {children}
+        </section>
+      );
+    }
+
+    function Field({ zoneMode, setZoneMode }) {
+      const canvasRef = useRef(null);
+      const [tool, setTool] = useState('select');
+      const [color, setColor] = useState('#facc15');
+      const [objects, setObjects] = useState([]);
+      const [drawing, setDrawing] = useState(null);
+      const [selectedId, setSelectedId] = useState(null);
+
+      const zones = zoneSets[zoneMode];
+
+      function pointFromEvent(event) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        return {
+          x: (event.clientX - rect.left) * 560 / rect.width,
+          y: (event.clientY - rect.top) * 320 / rect.height
+        };
+      }
+
+      function nearestObject(p, maxDistance = 18) {
+        let best = { index: -1, dist: maxDistance + 1 };
+        objects.forEach((obj, index) => {
+          const cx = obj.x ?? obj.sx ?? 0;
+          const cy = obj.y ?? obj.sy ?? 0;
+          const d = Math.hypot(cx - p.x, cy - p.y);
+          if (d < best.dist) {
+            best = { index, dist: d };
+          }
+        });
+        return best.index;
+      }
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, 560, 320);
+
+        ctx.fillStyle = '#166534';
+        ctx.fillRect(0, 0, 560, 320);
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(8, 8, 544, 304);
+
+        ctx.beginPath();
+        ctx.moveTo(280, 8);
+        ctx.lineTo(280, 312);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(280, 160, 45, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeRect(8, 105, 72, 110);
+        ctx.strokeRect(480, 105, 72, 110);
+        ctx.strokeRect(8, 135, 25, 50);
+        ctx.strokeRect(527, 135, 25, 50);
+
+        objects.forEach((obj, index) => {
+          const selected = index === selectedId;
+          ctx.save();
+          ctx.strokeStyle = selected ? '#fef3c7' : obj.color || '#ffffff';
+          ctx.fillStyle = obj.color || '#ffffff';
+          ctx.lineWidth = selected ? 4 : 3;
+          ctx.lineCap = 'round';
+
+          if (obj.type === 'pass' || obj.type === 'run' || obj.type === 'line') {
+            ctx.setLineDash(obj.type === 'pass' ? [8, 6] : obj.type === 'run' ? [4, 5] : []);
+            ctx.beginPath();
+            ctx.moveTo(obj.sx, obj.sy);
+            ctx.lineTo(obj.ex, obj.ey);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            const angle = Math.atan2(obj.ey - obj.sy, obj.ex - obj.sx);
+            ctx.beginPath();
+            ctx.moveTo(obj.ex, obj.ey);
+            ctx.lineTo(obj.ex - 10 * Math.cos(angle - 0.5), obj.ey - 10 * Math.sin(angle - 0.5));
+            ctx.lineTo(obj.ex - 10 * Math.cos(angle + 0.5), obj.ey - 10 * Math.sin(angle + 0.5));
+            ctx.closePath();
+            ctx.fill();
+          } else if (obj.type === 'freehand') {
+            ctx.beginPath();
+            obj.points.forEach((point, pointIndex) => {
+              if (pointIndex === 0) ctx.moveTo(point.x, point.y); else ctx.lineTo(point.x, point.y);
+            });
+            ctx.stroke();
+          } else if (obj.type === 'player') {
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y, 11, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#111827';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(obj.label || '', obj.x, obj.y + 4);
+          } else if (obj.type === 'marker') {
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#111827';
+            ctx.fillRect(obj.x - 1, obj.y - 12, 2, 18);
+          } else if (obj.type === 'cone') {
+            ctx.beginPath();
+            ctx.moveTo(obj.x, obj.y - 9);
+            ctx.lineTo(obj.x - 8, obj.y + 9);
+            ctx.lineTo(obj.x + 8, obj.y + 9);
+            ctx.closePath();
+            ctx.fill();
+          } else if (obj.type === 'ball') {
+            ctx.beginPath();
+            ctx.arc(obj.x, obj.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          ctx.restore();
+        });
+
+        if (drawing) {
+          ctx.save();
+          ctx.strokeStyle = drawing.color || color;
+          ctx.lineWidth = 3;
+          ctx.lineCap = 'round';
+          if (drawing.type === 'freehand') {
+            ctx.beginPath();
+            drawing.points.forEach((point, index) => {
+              if (index === 0) ctx.moveTo(point.x, point.y); else ctx.lineTo(point.x, point.y);
+            });
+            ctx.stroke();
+          } else {
+            ctx.setLineDash(drawing.type === 'pass' ? [8, 6] : drawing.type === 'run' ? [4, 5] : []);
+            ctx.beginPath();
+            ctx.moveTo(drawing.sx, drawing.sy);
+            ctx.lineTo(drawing.ex, drawing.ey);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+          ctx.restore();
+        }
+      }, [objects, drawing, selectedId, color, zoneMode]);
+
+      function addObject(obj) {
+        setObjects(prev => [...prev, obj]);
+      }
+
+      function pointerDown(event) {
+        const p = pointFromEvent(event);
+
+        if (tool === 'erase') {
+          const index = nearestObject(p, 18);
+          if (index >= 0) {
+            setObjects(prev => prev.filter((_, idx) => idx !== index));
+            setSelectedId(null);
+          }
+          return;
+        }
+
+        if (tool === 'select') {
+          const index = nearestObject(p, 22);
+          setSelectedId(index >= 0 ? index : null);
+          return;
+        }
+
+        if (tool === 'freehand') {
+          setDrawing({ type: 'freehand', color, points: [p] });
+          return;
+        }
+
+        if (['pass', 'run', 'line'].includes(tool)) {
+          setDrawing({ type: tool, color, sx: p.x, sy: p.y, ex: p.x, ey: p.y });
+          return;
+        }
+
+        if (tool === 'player') {
+          const label = window.prompt('Player label or number:', '7') || '7';
+          addObject({ type: 'player', x: p.x, y: p.y, label, color });
+          return;
+        }
+
+        if (tool === 'marker') {
+          addObject({ type: 'marker', x: p.x, y: p.y, color });
+          return;
+        }
+
+        if (tool === 'ball') {
+          addObject({ type: 'ball', x: p.x, y: p.y, color });
+          return;
+        }
+
+        if (tool === 'cone') {
+          addObject({ type: 'cone', x: p.x, y: p.y, color });
+          return;
+        }
+      }
+
+      function pointerMove(event) {
+        if (!drawing) return;
+        const p = pointFromEvent(event);
+        setDrawing(prev => {
+          if (!prev) return prev;
+          if (prev.type === 'freehand') {
+            return { ...prev, points: [...prev.points, p] };
+          }
+          return { ...prev, ex: p.x, ey: p.y };
+        });
+      }
+
+      function pointerUp() {
+        if (!drawing) return;
+        setObjects(prev => [...prev, drawing]);
+        setDrawing(null);
+      }
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        canvas.addEventListener('pointerdown', pointerDown);
+        canvas.addEventListener('pointermove', pointerMove);
+        window.addEventListener('pointerup', pointerUp);
+        return () => {
+          canvas.removeEventListener('pointerdown', pointerDown);
+          canvas.removeEventListener('pointermove', pointerMove);
+          window.removeEventListener('pointerup', pointerUp);
+        };
+      }, [tool, drawing, color, objects]);
+
+      return (
+        <div className="bg-slate-900 rounded-2xl p-3 text-white shadow-xl">
+          <div className="flex flex-wrap gap-2 mb-3 print:hidden">
+            <select
+              value={zoneMode}
+              onChange={e => setZoneMode(e.target.value)}
+              className="bg-slate-700 text-white rounded px-2 py-2 text-xs font-bold outline-none"
+            >
+              <option value="traditional">Traditional thirds</option>
+              <option value="halfspaces">Half spaces</option>
+            </select>
+
+            {['select', 'player', 'ball', 'marker', 'cone', 'pass', 'run', 'line', 'freehand', 'erase'].map(toolName => (
+              <button
+                key={toolName}
+                type="button"
+                onClick={() => setTool(toolName)}
+                className={`px-2.5 py-2 rounded text-[11px] font-bold ${tool === toolName ? 'bg-yellow-400 text-slate-900' : 'bg-slate-700 hover:bg-slate-600'}`}
+              >
+                {toolName === 'select' ? 'Select' :
+                 toolName === 'player' ? 'Player' :
+                 toolName === 'ball' ? 'Ball' :
+                 toolName === 'marker' ? 'Marker' :
+                 toolName === 'cone' ? 'Cone' :
+                 toolName === 'pass' ? 'Pass' :
+                 toolName === 'run' ? 'Run' :
+                 toolName === 'line' ? 'Line' :
+                 toolName === 'freehand' ? 'Hand scan' : 'Erase'}
+              </button>
+            ))}
+
+            <input
+              type="color"
+              value={color}
+              onChange={e => setColor(e.target.value)}
+              className="h-9 w-9 rounded border border-white/20 bg-transparent"
+              aria-label="marker color"
+            />
+
+            <button
+              type="button"
+              onClick={() => setObjects([])}
+              className="px-2.5 py-2 rounded bg-red-700 text-[11px] font-bold hover:bg-red-600"
+            >
+              Clear board
+            </button>
+          </div>
+
+          <div className="relative overflow-hidden rounded-xl pitch-grid" style={{ backgroundColor: '#166534' }}>
+            <div className="absolute inset-0 pointer-events-none">
+              {zones.map(zone => (
+                <div
+                  key={zone.id}
+                  style={{
+                    position: 'absolute',
+                    left: `${zone.x}%`,
+                    top: `${zone.y}%`,
+                    width: `${zone.w}%`,
+                    height: `${zone.h}%`,
+                    background: zone.color,
+                    opacity: 0.14,
+                    borderRight: zone.x < 99 ? '1px solid rgba(255,255,255,0.45)' : 'none'
+                  }}
+                >
+                  <div className="flex h-full items-center justify-center text-[9px] font-black tracking-[0.18em] text-white/70 select-none">
+                    {zone.short}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <canvas ref={canvasRef} width={560} height={320} className="relative block w-full h-auto touch-none cursor-crosshair" />
+          </div>
+
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-300">
+            <span>{tool === 'freehand' ? 'Draw the movement scan directly on the pitch.' : 'Use the selected tool to build patterns, player markers, or key actions.'}</span>
+            <span>{objects.length} marks</span>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const [store, setStore] = useState(() => loadStore());
+      const [view, setView] = useState('session');
+      const [zoneMode, setZoneMode] = useState(store.zoneMode || 'traditional');
+      const [toast, setToast] = useState('');
+      const [session, setSession] = useState(store.session || DEFAULT_SESSION);
+
+      useEffect(() => {
+        setStore(prev => ({ ...prev, zoneMode, session }));
+      }, [zoneMode, session]);
+
+      useEffect(() => {
+        localStorage.setItem(STORAGE, JSON.stringify({ zoneMode, session }));
+      }, [zoneMode, session]);
+
+      useEffect(() => {
+        if (!toast) return;
+        const timeout = setTimeout(() => setToast(''), 1800);
+        return () => clearTimeout(timeout);
+      }, [toast]);
+
+      const updateSession = (key, value) => {
+        setSession(prev => ({ ...prev, [key]: value }));
+      };
+
+      const updateActivity = (index, field, value) => {
+        setSession(prev => ({
+          ...prev,
+          activities: prev.activities.map((activity, i) => i === index ? { ...activity, [field]: value } : activity)
+        }));
+      };
+
+      const addActivity = () => {
+        setSession(prev => ({
+          ...prev,
+          activities: [...prev.activities, { title: `Activity ${prev.activities.length + 1}`, explanation: '' }]
+        }));
+      };
+
+      const saveNow = () => {
+        setToast('Session saved locally');
+      };
+
+      return (
+        <main className="max-w-7xl mx-auto p-4 sm:p-6">
+          <header className="bg-white rounded-2xl border-2 border-slate-900 shadow-xl p-4 sm:p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight">{session.clubName}</h1>
+              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-slate-500">Pro Session Planner & Club Suite</p>
+            </div>
+
+            <nav className="flex flex-wrap gap-2 print:hidden">
+              {['session', 'zones', 'notes'].map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setView(tab)}
+                  className={`rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] ${view === tab ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                >
+                  {tab === 'session' ? 'Session' : tab === 'zones' ? 'Field zones' : 'Coach notes'}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white hover:bg-blue-500"
+              >
+                Print
+              </button>
+            </nav>
+          </header>
+
+          {toast && (
+            <div className="fixed right-4 top-4 z-50 rounded-lg bg-emerald-600 text-white px-4 py-3 text-sm font-bold shadow-lg">
+              {toast}
+            </div>
+          )}
+
+          {view === 'session' && (
+            <div className="space-y-6">
+              <Panel title="Session details" subtitle="Club planning">
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <input
+                    value={session.clubName}
+                    onChange={e => updateSession('clubName', e.target.value)}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-bold sm:col-span-2"
+                    placeholder="Club / academy"
+                  />
+                  <input
+                    value={session.team}
+                    onChange={e => updateSession('team', e.target.value)}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="Team"
+                  />
+                  <input
+                    type="date"
+                    value={session.date}
+                    onChange={e => updateSession('date', e.target.value)}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+                  <div>
+                    <label className="block text-[11px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2">Session focus</label>
+                    <textarea
+                      value={session.focus}
+                      onChange={e => updateSession('focus', e.target.value)}
+                      className="w-full min-h-[110px] rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2">Key objective</label>
+                    <textarea
+                      value={session.objectives}
+                      onChange={e => updateSession('objectives', e.target.value)}
+                      className="w-full min-h-[110px] rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {session.tags.map((tag, index) => (
+                    <span key={index} className="rounded-full bg-slate-100 border border-slate-300 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-5 flex gap-3">
+                  <button type="button" onClick={saveNow} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500">Save session</button>
+                  <button type="button" onClick={() => setSession(prev => ({ ...prev, tags: [...prev.tags, 'New focus'] }))} className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-bold text-slate-800 hover:bg-slate-300">Add tag</button>
+                </div>
+              </Panel>
+
+              <Panel title="Training blocks" subtitle="Session plan">
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {session.activities.map((activity, index) => (
+                    <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <input
+                        value={activity.title}
+                        onChange={e => updateActivity(index, 'title', e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm font-black mb-2"
+                      />
+                      <textarea
+                        value={activity.explanation}
+                        onChange={e => updateActivity(index, 'explanation', e.target.value)}
+                        className="w-full min-h-[150px] rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                        placeholder="Detail the activity and key coaching points..."
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <button type="button" onClick={addActivity} className="mt-5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-700">Add activity</button>
+              </Panel>
+            </div>
+          )}
+
+          {view === 'zones' && (
+            <div className="space-y-6">
+              <Panel title="Pitch planning board" subtitle="Traditional thirds + half spaces">
+                <Field zoneMode={zoneMode} setZoneMode={setZoneMode} />
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {zoneSets[zoneMode].map(zone => (
+                    <div key={zone.id} className="rounded-xl border-l-4 p-3" style={{ borderColor: zone.color }}>
+                      <div className="text-sm font-black uppercase">{zone.label}</div>
+                      <div className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">{zone.short}</div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </div>
+          )}
+
+          {view === 'notes' && (
+            <div className="space-y-6">
+              <Panel title="Coach notes" subtitle="Session summary">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">Game model</div>
+                    <textarea
+                      value={session.focus}
+                      onChange={e => updateSession('focus', e.target.value)}
+                      className="min-h-[180px] w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">Coaching cues</div>
+                    <ul className="space-y-2 text-sm text-slate-700">
+                      <li>• Check body shape before the first pass.</li>
+                      <li>• Attack the half-spaces with the 6 and 10 between the lines.</li>
+                      <li>• Keep width on the back side of the ball in build-up.</li>
+                      <li>• Trigger pressing when the ball is on the far side.</li>
+                    </ul>
+                  </div>
+                </div>
+              </Panel>
+            </div>
+          )}
+        </main>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
 </body>
 </html>
