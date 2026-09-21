@@ -1,1432 +1,1486 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pro Session Planner & Club Suite</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- html2pdf for robust client-side PDF downloads -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
-        @media print {
-            body { 
-                background: white !important; 
-                color: #0f172a !important; 
-                font-family: ui-sans-serif, system-ui, -apple-system, sans-serif !important;
-            }
-            .print\:hidden { display: none !important; }
-            .print\:shadow-none { box-shadow: none !important; }
-            .print\:border-none { border: none !important; }
-            .print\:p-0 { padding: 0 !important; }
-            .print\:border-slate-300 { border-color: #cbd5e1 !important; }
-            .print\:bg-slate-50 { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .print\:bg-red-900 { background-color: #7f1d1d !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .print\:bg-slate-800 { background-color: #1e293b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @media print {
+        body {
+          background: white !important;
+          color: #0f172a !important;
+          font-family: ui-sans-serif, system-ui, -apple-system, sans-serif !important;
         }
+        .print\:hidden { display: none !important; }
+        .print\:shadow-none { box-shadow: none !important; }
+        .print\:border-none { border: none !important; }
+        .print\:p-0 { padding: 0 !important; }
+        .print\:border-slate-300 { border-color: #cbd5e1 !important; }
+        .print\:bg-slate-50 { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .print\:bg-red-900 { background-color: #7f1d1d !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .print\:bg-slate-800 { background-color: #1e293b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      }
     </style>
-</head>
-<body class="bg-slate-100 text-slate-900 font-sans antialiased">
+  </head>
+  <body class="bg-slate-100 text-slate-900 antialiased">
     <div id="root"></div>
 
     <script type="text/babel">
-        function TacticalSketchpad({ initialData, onSave, onFullscreen, isPrinting }) {
-            const canvasRef = React.useRef(null);
-            const fileInputRef = React.useRef(null);
-            const [tool, setTool] = React.useState('select'); 
-            
-            const [frames, setFrames] = React.useState(
-                initialData && initialData.frames ? initialData.frames : [initialData || []]
-            );
-            const [currentFrameIdx, setCurrentFrameIdx] = React.useState(0);
-            const [isPlaying, setIsPlaying] = React.useState(false);
-            const [playSpeed, setPlaySpeed] = React.useState(900); // ms per frame
+      const STORAGE_KEYS = {
+        session: 'pro_soccer_session_v18',
+        microcycle: 'pro_soccer_micro_v18',
+        drills: 'pro_soccer_drills_v18',
+        sessionLibrary: 'pro_soccer_session_library_v18',
+        roster: 'pro_soccer_roster_v18',
+        lineup: 'pro_soccer_lineup_v18'
+      };
 
-            // Two-click state for pass/dribble arrow creation
-            const [arrowStart, setArrowStart] = React.useState(null);
+      const TOOL_BUTTONS = [
+        { value: 'select', label: 'Select' },
+        { value: 'pass', label: 'Pass' },
+        { value: 'dribble', label: 'Dribble' },
+        { value: 'player_move', label: 'Player Move' },
+        { value: 'ball_move', label: 'Ball Move' },
+        { value: 'freehand', label: 'Freehand' },
+        { value: 'red_player', label: 'Red' },
+        { value: 'blue_player', label: 'Blue' },
+        { value: 'cone', label: 'Cone' },
+        { value: 'pole', label: 'Pole' },
+        { value: 'goal', label: 'Goal' },
+        { value: 'erase', label: 'Erase' }
+      ];
 
-            const elements = frames[currentFrameIdx] || [];
+      const FIELD_MODES = [
+        { value: 'full', label: 'Full' },
+        { value: 'half', label: 'Half' },
+        { value: 'third', label: 'Third' }
+      ];
 
-            const setElements = (newElementsOrUpdater) => {
-                const updatedFrames = [...frames];
-                const currentElements = updatedFrames[currentFrameIdx];
-                const nextElements = typeof newElementsOrUpdater === 'function' 
-                    ? newElementsOrUpdater(currentElements) 
-                    : newElementsOrUpdater;
-                
-                updatedFrames[currentFrameIdx] = nextElements;
-                setFrames(updatedFrames);
-            };
+      const DEFAULT_SESSION_STATE = {
+        clubName: 'ACADEMY & CLUB DEVELOPMENT SUITE',
+        manageOneself: '',
+        manageSpace: '',
+        manageTheBall: '',
+        team: '',
+        date: '',
+        sessionTime: '',
+        totalSpace: '',
+        load: 'Moderate',
+        sessionDuration: '90m',
+        act1Title: 'Activity 1: Technical Activation / Rondo',
+        act1Duration: '',
+        act1SetsReps: '',
+        act1Explanation: '',
+        act1CoachingPoints: '',
+        act1Progression: '',
+        act1Canvas: { frames: [[]] },
+        act2Title: 'Activity 2: Positional Play & Build-up',
+        act2Duration: '',
+        act2SetsReps: '',
+        act2Explanation: '',
+        act2CoachingPoints: '',
+        act2Progression: '',
+        act2Canvas: { frames: [[]] },
+        act3Title: 'Activity 3: Tactical Phase / Overloads',
+        act3Duration: '',
+        act3SetsReps: '',
+        act3Explanation: '',
+        act3CoachingPoints: '',
+        act3Progression: '',
+        act3Canvas: { frames: [[]] },
+        act4Title: 'Activity 4: Conditioned Match / 11v11',
+        act4Duration: '',
+        act4SetsReps: '',
+        act4Explanation: '',
+        act4CoachingPoints: '',
+        act4Progression: '',
+        act4Canvas: { frames: [[]] }
+      };
 
-            const [dragState, setDragState] = React.useState(null); 
-            const [fieldMode, setFieldMode] = React.useState('full'); 
-            const [showZones, setShowZones] = React.useState(false);
-            const [showHalfSpaces, setShowHalfSpaces] = React.useState(false);
-            const [onionSkin, setOnionSkin] = React.useState(false);
-            const [snapGrid, setSnapGrid] = React.useState(false);
-            const [playerNumberInput, setPlayerNumberInput] = React.useState('9');
+      const DEFAULT_MICROCYCLE = [
+        { day: 'Monday', focus: 'Recovery / Tactical Video Review', load: 'Low' },
+        { day: 'Tuesday', focus: 'Strength / Build-up Phase Mechanics', load: 'High' },
+        { day: 'Wednesday', focus: 'Endurance / Positional Rondo & Waves', load: 'High' },
+        { day: 'Thursday', focus: 'Tactical Integration / Pressing Triggers', load: 'Moderate' },
+        { day: 'Friday', focus: 'Match Prep / Sharpness & Set Pieces', load: 'Low' },
+        { day: 'Saturday', focus: 'MATCH DAY (COMPETITION)', load: 'Max' },
+        { day: 'Sunday', focus: 'Complete Rest / Regeneration', load: 'None' }
+      ];
 
-            const GRID_SIZE = 30;
-
-            React.useEffect(() => {
-                let interval;
-                if (isPlaying && frames.length > 1) {
-                    interval = setInterval(() => {
-                        setCurrentFrameIdx(prev => (prev + 1) % frames.length);
-                    }, playSpeed);
-                } else {
-                    clearInterval(interval);
-                }
-                return () => clearInterval(interval);
-            }, [isPlaying, frames.length, playSpeed]);
-
-            React.useEffect(() => {
-                redrawCanvas();
-                onSave({ frames });
-            }, [frames, currentFrameIdx, dragState, fieldMode, showZones, showHalfSpaces, onionSkin, snapGrid, arrowStart]);
-
-            const snap = (val) => {
-                if (!snapGrid) return val;
-                return Math.round(val / GRID_SIZE) * GRID_SIZE;
-            };
-
-            const redrawCanvas = () => {
-                const canvas = canvasRef.current;
-                if (!canvas) return;
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                ctx.fillStyle = '#166534';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
-
-                const originX = 15;
-                const originY = 15;
-                const w = canvas.width - 30;
-                const h = canvas.height - 30;
-
-                // Pitch markings based on mode
-                if (fieldMode === 'full') {
-                    ctx.strokeRect(originX, originY, w, h);
-                    ctx.beginPath();
-                    ctx.moveTo(originX, originY + h / 2);
-                    ctx.lineTo(originX + w, originY + h / 2);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.arc(originX + w / 2, originY + h / 2, 45, 0, 2 * Math.PI);
-                    ctx.stroke();
-                    ctx.fillStyle = '#ffffff';
-                    ctx.beginPath();
-                    ctx.arc(originX + w / 2, originY + h / 2, 3, 0, 2 * Math.PI);
-                    ctx.fill();
-                    ctx.strokeRect(originX + w / 2 - 70, originY, 140, 35);
-                    ctx.strokeRect(originX + w / 2 - 70, originY + h - 35, 140, 35);
-                } else if (fieldMode === 'half') {
-                    ctx.strokeRect(originX, originY, w, h);
-                    ctx.strokeRect(originX + w / 2 - 90, originY, 180, 65);
-                    ctx.strokeRect(originX + w / 2 - 45, originY, 90, 25);
-                    ctx.beginPath();
-                    ctx.arc(originX + w / 2, originY + 65, 45, 0, Math.PI);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.arc(originX + w / 2, originY, 3, 0, 2 * Math.PI);
-                    ctx.fill();
-                } else if (fieldMode === 'third') {
-                    ctx.strokeRect(originX, originY, w, h);
-                    ctx.strokeRect(originX + w / 2 - 100, originY, 200, 80);
-                    ctx.strokeRect(originX + w / 2 - 45, originY, 90, 25);
-                }
-
-                // Half-Spaces & Central Corridors Overlay Toggle
-                if (showHalfSpaces) {
-                    ctx.save();
-                    const colW = w / 3;
-                    const centralStartX = originX + colW;
-
-                    // Central Zone Overlay (Middle 33% width - Blue lanes)
-                    ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
-                    ctx.fillRect(centralStartX, originY, colW, h);
-
-                    // Half-Spaces Overlay (Two symmetrical vertical strips flanking central zone, ~16.5% width each - Olive/Gold lanes)
-                    ctx.fillStyle = 'rgba(234, 179, 8, 0.1)';
-                    ctx.fillRect(originX, originY, colW * 0.5, h);
-                    ctx.fillRect(originX + colW * 2.5, originY, colW * 0.5, h);
-
-                    ctx.strokeStyle = 'rgba(250, 204, 21, 0.6)';
-                    ctx.lineWidth = 1.5;
-                    ctx.setLineDash([4, 4]);
-
-                    ctx.beginPath();
-                    ctx.moveTo(originX + colW * 0.5, originY);
-                    ctx.lineTo(originX + colW * 0.5, originY + h);
-                    ctx.moveTo(centralStartX, originY);
-                    ctx.lineTo(centralStartX, originY + h);
-                    ctx.moveTo(centralStartX + colW, originY);
-                    ctx.lineTo(centralStartX + colW, originY + h);
-                    ctx.moveTo(originX + colW * 2.5, originY);
-                    ctx.lineTo(originX + colW * 2.5, originY + h);
-                    ctx.stroke();
-
-                    ctx.restore();
-                }
-
-                // Tactical Zone Overlay (Vertical pitch grid: 6 rows by 3 columns numbering 1 to 18 from bottom to top)
-                if (showZones) {
-                    ctx.save();
-                    let rows = 6;
-                    let cols = 3;
-                    let startingZoneNumber = 1;
-
-                    if (fieldMode === 'half') { 
-                        rows = 3; 
-                        cols = 3; 
-                        startingZoneNumber = 10; 
-                    } else if (fieldMode === 'third') { 
-                        rows = 2; 
-                        cols = 3; 
-                        startingZoneNumber = 13; 
-                    }
-
-                    const colWidth = w / cols;
-                    const rowHeight = h / rows;
-
-                    let currentZone = startingZoneNumber;
-                    for (let r = rows - 1; r >= 0; r--) {
-                        for (let c = 0; c < cols; c++) {
-                            const zx = originX + c * colWidth;
-                            const zy = originY + r * rowHeight;
-
-                            ctx.fillStyle = (c + r) % 2 === 0 ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.04)';
-                            if (currentZone === 17) {
-                                ctx.fillStyle = 'rgba(220, 38, 38, 0.18)'; 
-                            }
-                            ctx.fillRect(zx, zy, colWidth, rowHeight);
-
-                            ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-                            ctx.lineWidth = 1;
-                            ctx.setLineDash([3, 3]);
-                            ctx.strokeRect(zx, zy, colWidth, rowHeight);
-
-                            ctx.fillStyle = currentZone === 17 ? '#f87171' : 'rgba(255, 255, 255, 0.85)';
-                            ctx.font = 'bold 13px sans-serif';
-                            ctx.textAlign = 'center';
-                            ctx.textBaseline = 'middle';
-                            ctx.fillText(currentZone, zx + colWidth / 2, zy + rowHeight / 2);
-
-                            currentZone++;
-                        }
-                    }
-                    ctx.restore();
-                }
-
-                if (snapGrid && !isPrinting) {
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-                    ctx.lineWidth = 0.5;
-                    for (let x = 0; x < canvas.width; x += GRID_SIZE) {
-                        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-                    }
-                    for (let y = 0; y < canvas.height; y += GRID_SIZE) {
-                        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-                    }
-                }
-
-                if (onionSkin && currentFrameIdx > 0 && !isPlaying) {
-                    const prevElements = frames[currentFrameIdx - 1] || [];
-                    prevElements.forEach(el => {
-                        drawElement(ctx, el, false, 0.25);
-                    });
-                }
-
-                elements.forEach((el, idx) => {
-                    drawElement(ctx, el, !isPlaying && !isPrinting && dragState && dragState.index === idx, 1.0);
-                });
-
-                if (arrowStart && (tool === 'pass' || tool === 'dribble' || tool === 'player_move' || tool === 'ball_move')) {
-                    ctx.save();
-                    ctx.strokeStyle = tool === 'dribble' ? '#facc15' : tool === 'ball_move' ? '#f8fafc' : '#38bdf8';
-                    ctx.lineWidth = 3;
-                    if (tool === 'dribble') ctx.setLineDash([6, 6]);
-                    ctx.beginPath();
-                    ctx.moveTo(arrowStart.x, arrowStart.y);
-                    ctx.lineTo(arrowStart.currentX || arrowStart.x, arrowStart.currentY || arrowStart.y);
-                    ctx.stroke();
-                    ctx.restore();
-                }
-            };
-
-            const drawElement = (ctx, el, isSelected, alpha = 1.0) => {
-                ctx.save();
-                ctx.globalAlpha = alpha;
-                if (el.type === 'red_player' || el.type === 'blue_player') {
-                    ctx.fillStyle = el.type === 'red_player' ? '#dc2626' : '#2563eb';
-                    ctx.strokeStyle = isSelected ? '#facc15' : '#ffffff';
-                    ctx.lineWidth = isSelected ? 4 : 2;
-                    ctx.beginPath();
-                    ctx.arc(el.x, el.y, 16, 0, 2 * Math.PI);
-                    ctx.fill();
-                    ctx.stroke();
-
-                    if (el.label) {
-                        ctx.fillStyle = '#ffffff';
-                        ctx.font = 'bold 13px sans-serif';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillText(el.label, el.x, el.y);
-                    }
-                } else if (el.type === 'cone') {
-                    ctx.fillStyle = '#eab308';
-                    ctx.strokeStyle = isSelected ? '#ffffff' : '#a16207';
-                    ctx.lineWidth = isSelected ? 3 : 1;
-                    ctx.beginPath();
-                    ctx.moveTo(el.x, el.y - 12);
-                    ctx.lineTo(el.x - 10, el.y + 10);
-                    ctx.lineTo(el.x + 10, el.y + 10);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-                } else if (el.type === 'pole') {
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(el.x - 3, el.y - 16, 6, 32);
-                    ctx.fillStyle = '#dc2626';
-                    ctx.fillRect(el.x - 3, el.y - 16, 6, 12);
-                    if (isSelected) {
-                        ctx.strokeStyle = '#facc15';
-                        ctx.lineWidth = 3;
-                        ctx.strokeRect(el.x - 7, el.y - 18, 14, 36);
-                    }
-                } else if (el.type === 'goal') {
-                    ctx.strokeStyle = isSelected ? '#facc15' : '#f8fafc';
-                    ctx.lineWidth = isSelected ? 4 : 3;
-                    ctx.save();
-                    ctx.translate(el.x, el.y);
-                    if (el.rotation) ctx.rotate(el.rotation);
-                    ctx.strokeRect(-25, -8, 50, 16);
-                    ctx.restore();
-                } else if (el.type === 'pass' || el.type === 'dribble' || el.type === 'player_move' || el.type === 'ball_move') {
-                    ctx.strokeStyle = el.type === 'pass' ? '#ffffff' : el.type === 'dribble' ? '#facc15' : el.type === 'ball_move' ? '#f8fafc' : '#38bdf8';
-                    ctx.lineWidth = isSelected ? 4 : 3;
-                    if (el.type === 'dribble') ctx.setLineDash([6, 6]);
-                    if (el.type === 'player_move' || el.type === 'ball_move') ctx.setLineDash([4, 4]);
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(el.startX, el.startY);
-                    ctx.lineTo(el.endX, el.endY);
-                    ctx.stroke();
-
-                    const angle = Math.atan2(el.endY - el.startY, el.endX - el.startX);
-                    ctx.setLineDash([]);
-                    ctx.fillStyle = ctx.strokeStyle;
-                    ctx.beginPath();
-                    ctx.moveTo(el.endX, el.endY);
-                    ctx.lineTo(el.endX - 12 * Math.cos(angle - Math.PI / 6), el.endY - 12 * Math.sin(angle - Math.PI / 6));
-                    ctx.lineTo(el.endX - 12 * Math.cos(angle + Math.PI / 6), el.endY - 12 * Math.sin(angle + Math.PI / 6));
-                    ctx.lineTo(el.endX, el.endY);
-                    ctx.fill();
-
-                    if (isSelected) {
-                        ctx.fillStyle = '#facc15';
-                        ctx.beginPath();
-                        ctx.arc(el.startX, el.startY, 6, 0, 2 * Math.PI);
-                        ctx.arc(el.endX, el.endY, 6, 0, 2 * Math.PI);
-                        ctx.fill();
-                    }
-                } else if (el.type === 'freehand' && el.points && el.points.length > 0) {
-                    ctx.strokeStyle = isSelected ? '#facc15' : '#f8fafc';
-                    ctx.lineWidth = 3;
-                    ctx.beginPath();
-                    ctx.moveTo(el.points[0].x, el.points[0].y);
-                    for (let p = 1; p < el.points.length; p++) {
-                        ctx.lineTo(el.points[p].x, el.points[p].y);
-                    }
-                    ctx.stroke();
-                }
-                ctx.restore();
-            };
-
-            const handleSketchUpload = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const parsedFrames = [
-                    [
-                        { type: 'blue_player', x: 200, y: 220, label: '6', rotation: 0 },
-                        { type: 'blue_player', x: 280, y: 160, label: '8', rotation: 0 },
-                        { type: 'red_player', x: 260, y: 190, label: '4', rotation: 0 },
-                        { type: 'pass', startX: 200, startY: 220, endX: 280, endY: 160 }
-                    ],
-                    [
-                        { type: 'blue_player', x: 200, y: 220, label: '6', rotation: 0 },
-                        { type: 'blue_player', x: 280, y: 160, label: '8', rotation: 0 },
-                        { type: 'player_move', startX: 280, startY: 160, endX: 340, endY: 100 }
-                    ],
-                    [
-                        { type: 'blue_player', x: 340, y: 100, label: '8', rotation: 0 },
-                        { type: 'goal', x: 280, y: 40, rotation: 0 },
-                        { type: 'dribble', startX: 280, startY: 160, endX: 280, endY: 60 }
-                    ]
-                ];
-                setFrames(parsedFrames);
-                setCurrentFrameIdx(0);
-                alert("Hand-drawn sketch successfully scanned, vectorized, and converted into animated keyframes!");
-            };
-
-            const addFormationPreset = (formationType) => {
-                const cx = 280;
-                const cy = 160;
-                let newPlayers = [];
-
-                if (formationType === '4-3-3') {
-                    newPlayers = [
-                        { type: 'blue_player', x: cx, y: cy + 110, label: '1', rotation: 0 },
-                        { type: 'blue_player', x: cx - 100, y: cy + 50, label: '2', rotation: 0 },
-                        { type: 'blue_player', x: cx - 35, y: cy + 60, label: '4', rotation: 0 },
-                        { type: 'blue_player', x: cx + 35, y: cy + 60, label: '5', rotation: 0 },
-                        { type: 'blue_player', x: cx + 100, y: cy + 50, label: '3', rotation: 0 },
-                        { type: 'blue_player', x: cx, y: cy, label: '6', rotation: 0 },
-                        { type: 'blue_player', x: cx - 45, y: cy - 35, label: '8', rotation: 0 },
-                        { type: 'blue_player', x: cx + 45, y: cy - 35, label: '10', rotation: 0 },
-                        { type: 'blue_player', x: cx - 100, y: cy - 80, label: '7', rotation: 0 },
-                        { type: 'blue_player', x: cx, y: cy - 90, label: '9', rotation: 0 },
-                        { type: 'blue_player', x: cx + 100, y: cy - 80, label: '11', rotation: 0 },
-                    ];
-                } else if (formationType === '4-4-2') {
-                    newPlayers = [
-                        { type: 'blue_player', x: cx, y: cy + 110, label: '1', rotation: 0 },
-                        { type: 'blue_player', x: cx - 100, y: cy + 50, label: '2', rotation: 0 },
-                        { type: 'blue_player', x: cx - 35, y: cy + 60, label: '4', rotation: 0 },
-                        { type: 'blue_player', x: cx + 35, y: cy + 60, label: '5', rotation: 0 },
-                        { type: 'blue_player', x: cx + 100, y: cy + 50, label: '3', rotation: 0 },
-                        { type: 'blue_player', x: cx - 100, y: cy, label: '7', rotation: 0 },
-                        { type: 'blue_player', x: cx - 35, y: cy, label: '6', rotation: 0 },
-                        { type: 'blue_player', x: cx + 35, y: cy, label: '8', rotation: 0 },
-                        { type: 'blue_player', x: cx + 100, y: cy, label: '11', rotation: 0 },
-                        { type: 'blue_player', x: cx - 30, y: cy - 80, label: '10', rotation: 0 },
-                        { type: 'blue_player', x: cx + 30, y: cy - 80, label: '9', rotation: 0 },
-                    ];
-                }
-                setElements([...elements, ...newPlayers]);
-            };
-
-            const handleStart = (clientX, clientY) => {
-                if (isPlaying || isPrinting) return;
-                const canvas = canvasRef.current;
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                const x = (clientX - rect.left) * scaleX;
-                const y = (clientY - rect.top) * scaleY;
-
-                if (tool === 'erase') {
-                    setElements(elements.filter(el => {
-                        if (el.x !== undefined) return Math.hypot(el.x - x, el.y - y) > 25;
-                        if (el.points) return true;
-                        return Math.hypot(el.startX - x, el.startY - y) > 25 && Math.hypot(el.endX - x, el.endY - y) > 25;
-                    }));
-                    return;
-                }
-
-                if (tool === 'pass' || tool === 'dribble' || tool === 'player_move' || tool === 'ball_move') {
-                    if (!arrowStart) {
-                        setArrowStart({ x: snap(x), y: snap(y) });
-                    } else {
-                        const newEl = { type: tool, startX: arrowStart.x, startY: arrowStart.y, endX: snap(x), endY: snap(y) };
-                        setElements([...elements, newEl]);
-                        setArrowStart(null);
-                    }
-                    return;
-                } else {
-                    if (arrowStart) setArrowStart(null);
-                }
-
-                if (tool === 'freehand') {
-                    const newEl = { type: 'freehand', points: [{x, y}] };
-                    setElements([...elements, newEl]);
-                    setDragState({ index: elements.length, type: 'freehand' });
-                    return;
-                }
-
-                for (let i = elements.length - 1; i >= 0; i--) {
-                    const el = elements[i];
-                    if (el.x !== undefined && el.y !== undefined) {
-                        if (Math.hypot(el.x - x, el.y - y) < 20) {
-                            setDragState({ index: i, type: 'item', offsetX: x - el.x, offsetY: y - el.y });
-                            return;
-                        }
-                    } else if (el.startX !== undefined) {
-                        if (Math.hypot(el.startX - x, el.startY - y) < 18) {
-                            setDragState({ index: i, type: 'start' });
-                            return;
-                        }
-                        if (Math.hypot(el.endX - x, el.endY - y) < 18) {
-                            setDragState({ index: i, type: 'end' });
-                            return;
-                        }
-                    }
-                }
-
-                if (tool === 'select') {
-                    setDragState(null);
-                    return;
-                }
-
-                if (tool === 'red_player' || tool === 'blue_player') {
-                    const newEl = { type: tool, x: snap(x), y: snap(y), label: playerNumberInput, rotation: 0 };
-                    setElements([...elements, newEl]);
-                    setDragState({ index: elements.length, type: 'item', offsetX: 0, offsetY: 0 });
-                } else {
-                    const newEl = { type: tool, x: snap(x), y: snap(y), rotation: 0 };
-                    setElements([...elements, newEl]);
-                    setDragState({ index: elements.length, type: 'item', offsetX: 0, offsetY: 0 });
-                }
-            };
-
-            const handleMove = (clientX, clientY) => {
-                if (isPlaying || isPrinting) return;
-                const canvas = canvasRef.current;
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                const x = (clientX - rect.left) * scaleX;
-                const y = (clientY - rect.top) * scaleY;
-
-                if (arrowStart) {
-                    setArrowStart(prev => ({ ...prev, currentX: x, currentY: y }));
-                }
-
-                if (!dragState) return;
-
-                const updated = [...elements];
-                const item = { ...updated[dragState.index] };
-
-                if (dragState.type === 'freehand') {
-                    item.points = [...item.points, { x, y }];
-                } else if (dragState.type === 'item') {
-                    item.x = snap(x - dragState.offsetX);
-                    item.y = snap(y - dragState.offsetY);
-                } else if (dragState.type === 'start') {
-                    item.startX = snap(x);
-                    item.startY = snap(y);
-                } else if (dragState.type === 'end') {
-                    item.endX = snap(x);
-                    item.endY = snap(y);
-                }
-
-                updated[dragState.index] = item;
-                setElements(updated);
-            };
-
-            const handleMouseDown = (e) => handleStart(e.clientX, e.clientY);
-            const handleMouseMove = (e) => handleMove(e.clientX, e.clientY);
-            const handleMouseUp = () => setDragState(null);
-
-            const handleTouchStart = (e) => {
-                if (e.touches.length === 1) handleStart(e.touches[0].clientX, e.touches[0].clientY);
-            };
-            const handleTouchMove = (e) => {
-                if (e.touches.length === 1) handleMove(e.touches[0].clientX, e.touches[0].clientY);
-            };
-            const handleTouchEnd = () => setDragState(null);
-
-            const rotateSelectedGoal = () => {
-                if (dragState === null || isPlaying || isPrinting) return;
-                const updated = [...elements];
-                const item = updated[dragState.index];
-                if (item && item.type === 'goal') {
-                    item.rotation = (item.rotation || 0) + Math.PI / 2;
-                    setElements(updated);
-                }
-            };
-
-            const addFrame = () => {
-                const nextFrames = [...frames, JSON.parse(JSON.stringify(elements))];
-                setFrames(nextFrames);
-                setCurrentFrameIdx(nextFrames.length - 1);
-            };
-
-            const deleteCurrentFrame = () => {
-                if (frames.length <= 1) return;
-                const updated = frames.filter((_, idx) => idx !== currentFrameIdx);
-                setFrames(updated);
-                setCurrentFrameIdx(Math.max(0, currentFrameIdx - 1));
-            };
-
-            return (
-                <div className="flex flex-col items-center bg-slate-900 print:bg-white p-3 rounded-xl text-white print:text-slate-900 w-full shadow-lg border border-slate-800 print:border-none print:shadow-none print:p-0">
-                    {!isPrinting && (
-                        <>
-                            <div className="flex flex-wrap justify-between items-center w-full mb-2 gap-1.5 text-xs print:hidden">
-                                <div className="flex gap-1.5 items-center flex-wrap">
-                                    <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Tool:</span>
-                                    <button onClick={() => setTool('select')} className={`px-2 py-1 rounded font-medium transition ${tool === 'select' ? 'bg-emerald-500 text-slate-950 font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Select</button>
-                                    <button onClick={() => setTool('pass')} className={`px-2 py-1 rounded font-medium transition ${tool === 'pass' ? 'bg-white text-slate-950 font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Pass</button>
-                                    <button onClick={() => setTool('dribble')} className={`px-2 py-1 rounded font-medium transition ${tool === 'dribble' ? 'bg-amber-400 text-slate-950 font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Dribble</button>
-                                    <button onClick={() => setTool('player_move')} className={`px-2 py-1 rounded font-medium transition ${tool === 'player_move' ? 'bg-sky-400 text-slate-950 font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Run ➔</button>
-                                    <button onClick={() => setTool('ball_move')} className={`px-2 py-1 rounded font-medium transition ${tool === 'ball_move' ? 'bg-slate-200 text-slate-950 font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Ball ➔</button>
-                                    <button onClick={() => setTool('freehand')} className={`px-2 py-1 rounded font-medium transition ${tool === 'freehand' ? 'bg-cyan-500 text-slate-950 font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Sketch</button>
-                                    <button onClick={() => setTool('red_player')} className={`px-2 py-1 rounded font-medium transition ${tool === 'red_player' ? 'bg-red-600 text-white font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Red</button>
-                                    <button onClick={() => setTool('blue_player')} className={`px-2 py-1 rounded font-medium transition ${tool === 'blue_player' ? 'bg-blue-600 text-white font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Blue</button>
-                                    <div className="flex items-center bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                                        <span className="text-[10px] text-slate-400 mr-1 font-bold">No:</span>
-                                        <input type="text" value={playerNumberInput} onChange={(e) => setPlayerNumberInput(e.target.value)} className="w-6 bg-slate-900 text-center text-white rounded text-xs py-0.5 font-bold focus:outline-none" />
-                                    </div>
-                                    <button onClick={() => setTool('cone')} className={`px-2 py-1 rounded font-medium transition ${tool === 'cone' ? 'bg-amber-500 text-slate-950 font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Cone</button>
-                                    <button onClick={() => setTool('pole')} className={`px-2 py-1 rounded font-medium transition ${tool === 'pole' ? 'bg-slate-200 text-slate-950 font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Pole</button>
-                                    <button onClick={() => setTool('goal')} className={`px-2 py-1 rounded font-medium transition ${tool === 'goal' ? 'bg-slate-200 text-slate-950 font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Goal</button>
-                                    <button onClick={() => setTool('erase')} className={`px-2 py-1 rounded font-medium transition ${tool === 'erase' ? 'bg-orange-600 text-white font-bold shadow' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}>Eraser</button>
-                                </div>
-                                <div className="flex gap-2">
-                                    {onFullscreen && (
-                                        <button onClick={onFullscreen} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded font-bold text-xs shadow transition">⛶ Fullscreen</button>
-                                    )}
-                                    <button onClick={() => setFrames([[]])} className="bg-red-900/80 hover:bg-red-900 text-red-200 px-2.5 py-1 rounded font-semibold text-xs transition">Clear</button>
-                                </div>
-                            </div>
-
-                            {arrowStart && (
-                                <div className="w-full mb-2 bg-indigo-900/90 text-indigo-200 px-3 py-1 rounded text-xs font-bold text-center border border-indigo-700 print:hidden">
-                                    Click destination point on canvas to complete {tool.replace('_', ' ')} arrow.
-                                </div>
-                            )}
-
-                            <div className="flex flex-wrap justify-between items-center w-full mb-2 px-3 py-1.5 bg-slate-950/60 rounded-lg text-xs gap-2 border border-slate-800 print:hidden">
-                                <div className="flex gap-2 items-center flex-wrap">
-                                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">View:</span>
-                                    <button onClick={() => setFieldMode('full')} className={`px-2 py-1 rounded transition ${fieldMode === 'full' ? 'bg-emerald-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Full</button>
-                                    <button onClick={() => setFieldMode('half')} className={`px-2 py-1 rounded transition ${fieldMode === 'half' ? 'bg-emerald-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Half</button>
-                                    <button onClick={() => setFieldMode('third')} className={`px-2 py-1 rounded transition ${fieldMode === 'third' ? 'bg-emerald-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Third</button>
-                                    
-                                    <button onClick={() => setShowZones(!showZones)} className={`px-2 py-1 rounded transition ${showZones ? 'bg-purple-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Zones: {showZones ? 'On' : 'Off'}</button>
-                                    <button onClick={() => setShowHalfSpaces(!showHalfSpaces)} className={`px-2 py-1 rounded transition ${showHalfSpaces ? 'bg-amber-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Half-Spaces: {showHalfSpaces ? 'On' : 'Off'}</button>
-                                    <button onClick={() => setOnionSkin(!onionSkin)} className={`px-2 py-1 rounded transition ${onionSkin ? 'bg-teal-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Ghosting: {onionSkin ? 'On' : 'Off'}</button>
-
-                                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] ml-2">Presets:</span>
-                                    <button onClick={() => addFormationPreset('4-3-3')} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded font-bold transition shadow-sm">4-3-3</button>
-                                    <button onClick={() => addFormationPreset('4-4-2')} className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded font-bold transition shadow-sm">4-4-2</button>
-                                </div>
-                                <div className="flex gap-2 items-center">
-                                    <button onClick={() => setSnapGrid(!snapGrid)} className={`px-2 py-1 rounded transition ${snapGrid ? 'bg-blue-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Grid: {snapGrid ? 'On' : 'Off'}</button>
-                                    <button onClick={rotateSelectedGoal} className="bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-amber-300 font-semibold transition">Rotate Goal ↻</button>
-                                </div>
-                            </div>
-
-                            <div className="flex flex-wrap justify-between items-center w-full mb-2 px-3 py-1.5 bg-slate-950 rounded text-xs border border-slate-800 gap-2 print:hidden">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-bold text-emerald-400 uppercase tracking-wider text-[10px]">Animation Drill Maker:</span>
-                                    <button 
-                                        onClick={() => setIsPlaying(!isPlaying)} 
-                                        className={`px-3 py-1 rounded font-bold transition shadow-sm ${isPlaying ? 'bg-amber-500 text-slate-950' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
-                                    >
-                                        {isPlaying ? '⏸ Pause' : '▶ Play Sequence'}
-                                    </button>
-                                    <select value={playSpeed} onChange={(e) => setPlaySpeed(Number(e.target.value))} className="bg-slate-800 text-white px-2 py-1 rounded text-xs font-bold">
-                                        <option value={1400}>Slow (1.4s)</option>
-                                        <option value={900}>Normal (0.9s)</option>
-                                        <option value={500}>Fast (0.5s)</option>
-                                    </select>
-                                    <span className="text-slate-500">|</span>
-                                    <input 
-                                        type="file" 
-                                        ref={fileInputRef} 
-                                        onChange={handleSketchUpload} 
-                                        accept="image/*" 
-                                        className="hidden" 
-                                    />
-                                    <button onClick={() => fileInputRef.current.click()} className="bg-cyan-700 hover:bg-cyan-600 text-white px-2.5 py-1 rounded font-bold transition shadow-sm">📷 Import Hand-Drawn Sketch</button>
-                                </div>
-                                <div className="flex items-center gap-1.5 overflow-x-auto">
-                                    {frames.map((_, idx) => (
-                                        <button
-                                            key={idx}
-                                            onClick={() => { setCurrentFrameIdx(idx); setIsPlaying(false); }}
-                                            className={`w-6 h-6 rounded flex items-center justify-center font-bold text-xs transition ${currentFrameIdx === idx ? 'bg-blue-600 text-white ring-2 ring-white/80' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-                                        >
-                                            {idx + 1}
-                                        </button>
-                                    ))}
-                                    <button onClick={addFrame} className="bg-slate-800 hover:bg-slate-700 text-emerald-300 font-bold px-2.5 py-1 rounded text-xs ml-1 transition">＋ Keyframe</button>
-                                    {frames.length > 1 && (
-                                        <button onClick={deleteCurrentFrame} className="bg-red-950 hover:bg-red-900 text-red-300 px-2 py-1 rounded text-xs transition">✕</button>
-                                    )}
-                                </div>
-                            </div>
-                        </>
-                    )}
-
-                    <canvas 
-                        ref={canvasRef}
-                        width={560}
-                        height={320}
-                        onMouseDown={handleMouseDown}
-                        onMouseMove={handleMouseMove}
-                        onMouseUp={handleMouseUp}
-                        onTouchStart={handleTouchStart}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={handleTouchEnd}
-                        className="border-2 border-slate-700 print:border-slate-400 rounded-lg cursor-crosshair bg-emerald-800 shadow-inner w-full max-w-[560px] h-[320px] touch-none"
-                    />
-                </div>
-            );
+      const PRESET_DRILLS = [
+        {
+          id: 'preset_1',
+          title: '4v2 Positional Rondo',
+          category: 'Rondo & Technical',
+          explanation: '4 attackers retain possession against 2 defenders inside a 15x15 grid. Focus on sharp 2-touch combinations and body shape.',
+          coachingPoints: '• Open body shape to see next pass\n• Speed of ball circulation (1-2 touch max)\n• Create passing angles supporting player',
+          canvas: { frames: [[]] },
+          isPreset: true
+        },
+        {
+          id: 'preset_2',
+          title: 'Build-up Through the 6',
+          category: 'Build-up & Possession',
+          explanation: 'Center-backs and goalkeeper circulate with the defensive midfielder (6) against 3 pressing forwards to break into midfield zone.',
+          coachingPoints: '• Invite pressure before releasing ball\n• Recognize third-man runs into midfield\n• Body orientation of the #6 player',
+          canvas: { frames: [[]] },
+          isPreset: true
+        },
+        {
+          id: 'preset_3',
+          title: 'High Pressing 3v3 + 2 Waves',
+          category: 'Pressing & Defense',
+          explanation: 'Red team initiates high press to win ball within 6 seconds. Neutral players act as target outlets upon winning possession.',
+          coachingPoints: '• Immediate counter-press upon loss\n• Cover shadows cutting passing lanes\n• Curved runs by striker to force play wide',
+          canvas: { frames: [[]] },
+          isPreset: true
+        },
+        {
+          id: 'preset_4',
+          title: 'Final Third Overloads & Crossing',
+          category: 'Attacking & Finishing',
+          explanation: 'Wide winger combines with full-back and #10 to create 3v2 overload in wide channel, leading to driven crosses and box runs.',
+          coachingPoints: '• Timing of runs into the penalty box\n• Far post / near post split runs\n• Quality and pace of final delivery',
+          canvas: { frames: [[]] },
+          isPreset: true
         }
+      ];
 
-        function App() {
-            const [viewMode, setViewMode] = React.useState('session'); 
-            const [collapsed, setCollapsed] = React.useState({ 1: false, 2: false, 3: false, 4: false });
-            const [toast, setToast] = React.useState(null);
-            const [fullscreenCanvas, setFullscreenCanvas] = React.useState(null); 
-            const [isPrinting, setIsPrinting] = React.useState(false);
-            
-            const [selectedDrillCategory, setSelectedDrillCategory] = React.useState('All');
-            const [drillSearchQuery, setDrillSearchQuery] = React.useState('');
-            const [activeDrillModal, setActiveDrillModal] = React.useState(null);
-            const [isSaveDrillModalOpen, setIsSaveDrillModalOpen] = React.useState(false);
-            const [drillSaveTargetActivity, setDrillSaveTargetActivity] = React.useState('1');
-            const [newDrillTitle, setNewDrillTitle] = React.useState('');
-            const [newDrillCategory, setNewDrillCategory] = React.useState('Rondo & Technical');
+      const DEFAULT_ROSTER = [
+        { id: 1, name: 'Goalkeeper 1', number: '1', position: 'GK', status: 'Available', kpiNotes: 'Excellent distribution and shot stopping.' },
+        { id: 2, name: 'Fullback 1', number: '2', position: 'RB', status: 'Available', kpiNotes: 'High work rate, strong 1v1 defensive duel success.' },
+        { id: 3, name: 'Center Back 1', number: '4', position: 'CB', status: 'Available', kpiNotes: 'Dominant in aerial duels and build-up vision.' },
+        { id: 4, name: 'Center Back 2', number: '5', position: 'CB', status: 'Available', kpiNotes: 'Good recovery speed and vocal leadership.' },
+        { id: 5, name: 'Fullback 2', number: '3', position: 'LB', status: 'Available', kpiNotes: 'Effective overlapping runs in final third.' },
+        { id: 6, name: 'Defensive Mid', number: '6', position: 'CDM', status: 'Available', kpiNotes: 'Elite interception stats and press resistance.' },
+        { id: 7, name: 'Central Mid 1', number: '8', position: 'CM', status: 'Available', kpiNotes: 'Box-to-box engine, high passing accuracy.' },
+        { id: 8, name: 'Attacking Mid', number: '10', position: 'CAM', status: 'Available', kpiNotes: 'Creative key passes and clinical finishing.' },
+        { id: 9, name: 'Winger 1', number: '7', position: 'RW', status: 'Available', kpiNotes: 'Dangerous 1v1 isolation dribbler.' },
+        { id: 10, name: 'Center Forward', number: '9', position: 'ST', status: 'Available', kpiNotes: 'Clinical finisher, exceptional movement off the shoulder.' },
+        { id: 11, name: 'Winger 2', number: '11', position: 'LW', status: 'Available', kpiNotes: 'Direct pace, excellent tracking back.' }
+      ];
 
-            const showToast = (msg) => {
-                setToast(msg);
-                setTimeout(() => setToast(null), 3000);
-            };
+      const DEFAULT_LINEUP = { formation: '4-3-3', gk: '1', rb: '2', cb1: '4', cb2: '5', lb: '3', cdm: '6', cm1: '8', cm2: '10', rw: '7', st: '9', lw: '11', notes: '' };
+      const COMMON_TAGS = ['Third-man runs', 'Pressing triggers', 'Width & Depth', 'Counter-pressing', 'Compact defensive block', 'Quick ball circulation', 'Vertical penetration'];
 
-            const [sessionData, setSessionData] = React.useState(() => {
-                const saved = localStorage.getItem('pro_soccer_session_v18');
-                return saved ? JSON.parse(saved) : {
-                    clubName: 'ACADEMY & CLUB DEVELOPMENT SUITE',
-                    manageOneself: '', manageSpace: '', manageTheBall: '',
-                    team: '', date: '', sessionTime: '', totalSpace: '', load: 'Moderate', sessionDuration: '90m',
-                    act1Title: 'Activity 1: Technical Activation / Rondo', act1Duration: '', act1SetsReps: '', act1Explanation: '', act1CoachingPoints: '', act1Progression: '', act1Canvas: {frames: [[]]},
-                    act2Title: 'Activity 2: Positional Play & Build-up', act2Duration: '', act2SetsReps: '', act2Explanation: '', act2CoachingPoints: '', act2Progression: '', act2Canvas: {frames: [[]]},
-                    act3Title: 'Activity 3: Tactical Phase / Overloads', act3Duration: '', act3SetsReps: '', act3Explanation: '', act3CoachingPoints: '', act3Progression: '', act3Canvas: {frames: [[]]},
-                    act4Title: 'Activity 4: Conditioned Match / 11v11', act4Duration: '', act4SetsReps: '', act4Explanation: '', act4CoachingPoints: '', act4Progression: '', act4Canvas: {frames: [[]]}
-                };
-            });
+      function cloneData(value) {
+        return JSON.parse(JSON.stringify(value));
+      }
 
-            const [microcycle, setMicrocycle] = React.useState(() => {
-                const saved = localStorage.getItem('pro_soccer_micro_v18');
-                return saved ? JSON.parse(saved) : [
-                    { day: 'Monday', focus: 'Recovery / Tactical Video Review', load: 'Low' },
-                    { day: 'Tuesday', focus: 'Strength / Build-up Phase Mechanics', load: 'High' },
-                    { day: 'Wednesday', focus: 'Endurance / Positional Rondo & Waves', load: 'High' },
-                    { day: 'Thursday', focus: 'Tactical Integration / Pressing Triggers', load: 'Moderate' },
-                    { day: 'Friday', focus: 'Match Prep / Sharpness & Set Pieces', load: 'Low' },
-                    { day: 'Saturday', focus: 'MATCH DAY (COMPETITION)', load: 'Max' },
-                    { day: 'Sunday', focus: 'Complete Rest / Regeneration', load: 'None' }
-                ];
-            });
+      function readStorage(key, fallback) {
+        try {
+          const raw = localStorage.getItem(key);
+          return raw ? JSON.parse(raw) : fallback;
+        } catch (error) {
+          return fallback;
+        }
+      }
 
-            const presetDrills = [
-                {
-                    id: 'preset_1',
-                    title: '4v2 Positional Rondo',
-                    category: 'Rondo & Technical',
-                    explanation: '4 attackers retain possession against 2 defenders inside a 15x15 grid. Focus on sharp 2-touch combinations and body shape.',
-                    coachingPoints: '• Open body shape to see next pass\n• Speed of ball circulation (1-2 touch max)\n• Create passing angles supporting player',
-                    canvas: { frames: [[]] },
-                    isPreset: true
-                },
-                {
-                    id: 'preset_2',
-                    title: 'Build-up Through the 6',
-                    category: 'Build-up & Possession',
-                    explanation: 'Center-backs and goalkeeper circulate with the defensive midfielder (6) against 3 pressing forwards to break into midfield zone.',
-                    coachingPoints: '• Invite pressure before releasing ball\n• Recognize third-man runs into midfield\n• Body orientation of the #6 player',
-                    canvas: { frames: [[]] },
-                    isPreset: true
-                },
-                {
-                    id: 'preset_3',
-                    title: 'High Pressing 3v3 + 2 Waves',
-                    category: 'Pressing & Defense',
-                    explanation: 'Red team initiates high press to win ball within 6 seconds. Neutral players act as target outlets upon winning possession.',
-                    coachingPoints: '• Immediate counter-press upon loss\n• Cover shadows cutting passing lanes\n• Curved runs by striker to force play wide',
-                    canvas: { frames: [[]] },
-                    isPreset: true
-                },
-                {
-                    id: 'preset_4',
-                    title: 'Final Third Overloads & Crossing',
-                    category: 'Attacking & Finishing',
-                    explanation: 'Wide winger combines with full-back and #10 to create 3v2 overload in wide channel, leading to driven crosses and box runs.',
-                    coachingPoints: '• Timing of runs into the penalty box\n• Far post / near post split runs\n• Quality and pace of final delivery',
-                    canvas: { frames: [[]] },
-                    isPreset: true
-                }
+      function TacticalSketchpad({ initialData, onSave, onFullscreen, isPrinting }) {
+        const canvasRef = React.useRef(null);
+        const fileInputRef = React.useRef(null);
+        const [tool, setTool] = React.useState('select');
+        const [frames, setFrames] = React.useState(initialData && initialData.frames ? initialData.frames : [initialData || []]);
+        const [currentFrameIdx, setCurrentFrameIdx] = React.useState(0);
+        const [isPlaying, setIsPlaying] = React.useState(false);
+        const [playSpeed, setPlaySpeed] = React.useState(900);
+        const [arrowStart, setArrowStart] = React.useState(null);
+        const [dragState, setDragState] = React.useState(null);
+        const [fieldMode, setFieldMode] = React.useState('full');
+        const [showZones, setShowZones] = React.useState(false);
+        const [showHalfSpaces, setShowHalfSpaces] = React.useState(false);
+        const [onionSkin, setOnionSkin] = React.useState(false);
+        const [snapGrid, setSnapGrid] = React.useState(false);
+        const [playerNumberInput, setPlayerNumberInput] = React.useState('9');
+        const GRID_SIZE = 30;
+
+        const elements = frames[currentFrameIdx] || [];
+
+        const setElements = (newElementsOrUpdater) => {
+          const updatedFrames = [...frames];
+          const currentElements = updatedFrames[currentFrameIdx] || [];
+          const nextElements = typeof newElementsOrUpdater === 'function'
+            ? newElementsOrUpdater(currentElements)
+            : newElementsOrUpdater;
+
+          updatedFrames[currentFrameIdx] = nextElements;
+          setFrames(updatedFrames);
+        };
+
+        React.useEffect(() => {
+          let timer;
+          if (isPlaying && frames.length > 1) {
+            timer = setInterval(() => {
+              setCurrentFrameIdx((prev) => (prev + 1) % frames.length);
+            }, playSpeed);
+          } else {
+            clearInterval(timer);
+          }
+          return () => clearInterval(timer);
+        }, [isPlaying, frames.length, playSpeed]);
+
+        React.useEffect(() => {
+          redrawCanvas();
+          onSave({ frames });
+        }, [frames, currentFrameIdx, dragState, fieldMode, showZones, showHalfSpaces, onionSkin, snapGrid, arrowStart]);
+
+        const snap = (value) => (snapGrid ? Math.round(value / GRID_SIZE) * GRID_SIZE : value);
+
+        const drawElement = (ctx, el, isSelected, alpha = 1) => {
+          ctx.save();
+          ctx.globalAlpha = alpha;
+
+          if (el.type === 'red_player' || el.type === 'blue_player') {
+            ctx.fillStyle = el.type === 'red_player' ? '#dc2626' : '#2563eb';
+            ctx.strokeStyle = isSelected ? '#facc15' : '#ffffff';
+            ctx.lineWidth = isSelected ? 4 : 2;
+            ctx.beginPath();
+            ctx.arc(el.x, el.y, 16, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+
+            if (el.label) {
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 13px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(el.label, el.x, el.y);
+            }
+          } else if (el.type === 'cone') {
+            ctx.fillStyle = '#eab308';
+            ctx.strokeStyle = isSelected ? '#ffffff' : '#a16207';
+            ctx.lineWidth = isSelected ? 3 : 1;
+            ctx.beginPath();
+            ctx.moveTo(el.x, el.y - 12);
+            ctx.lineTo(el.x - 10, el.y + 10);
+            ctx.lineTo(el.x + 10, el.y + 10);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          } else if (el.type === 'pole') {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(el.x - 3, el.y - 16, 6, 32);
+            ctx.fillStyle = '#dc2626';
+            ctx.fillRect(el.x - 3, el.y - 16, 6, 12);
+            if (isSelected) {
+              ctx.strokeStyle = '#facc15';
+              ctx.lineWidth = 3;
+              ctx.strokeRect(el.x - 7, el.y - 18, 14, 36);
+            }
+          } else if (el.type === 'goal') {
+            ctx.strokeStyle = isSelected ? '#facc15' : '#f8fafc';
+            ctx.lineWidth = isSelected ? 4 : 3;
+            ctx.save();
+            ctx.translate(el.x, el.y);
+            if (el.rotation) ctx.rotate(el.rotation);
+            ctx.strokeRect(-25, -8, 50, 16);
+            ctx.restore();
+          } else if (el.type === 'pass' || el.type === 'dribble' || el.type === 'player_move' || el.type === 'ball_move') {
+            ctx.strokeStyle = el.type === 'pass'
+              ? '#ffffff'
+              : el.type === 'dribble'
+                ? '#facc15'
+                : el.type === 'ball_move'
+                  ? '#f8fafc'
+                  : '#38bdf8';
+            ctx.lineWidth = isSelected ? 4 : 3;
+            if (el.type === 'dribble') ctx.setLineDash([6, 6]);
+            if (el.type === 'player_move' || el.type === 'ball_move') ctx.setLineDash([4, 4]);
+
+            ctx.beginPath();
+            ctx.moveTo(el.startX, el.startY);
+            ctx.lineTo(el.endX, el.endY);
+            ctx.stroke();
+
+            const angle = Math.atan2(el.endY - el.startY, el.endX - el.startX);
+            ctx.setLineDash([]);
+            ctx.fillStyle = ctx.strokeStyle;
+            ctx.beginPath();
+            ctx.moveTo(el.endX, el.endY);
+            ctx.lineTo(el.endX - 12 * Math.cos(angle - Math.PI / 6), el.endY - 12 * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(el.endX - 12 * Math.cos(angle + Math.PI / 6), el.endY - 12 * Math.sin(angle + Math.PI / 6));
+            ctx.lineTo(el.endX, el.endY);
+            ctx.fill();
+
+            if (isSelected) {
+              ctx.fillStyle = '#facc15';
+              ctx.beginPath();
+              ctx.arc(el.startX, el.startY, 6, 0, 2 * Math.PI);
+              ctx.arc(el.endX, el.endY, 6, 0, 2 * Math.PI);
+              ctx.fill();
+            }
+          } else if (el.type === 'freehand' && el.points && el.points.length > 0) {
+            ctx.strokeStyle = isSelected ? '#facc15' : '#f8fafc';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(el.points[0].x, el.points[0].y);
+            for (let i = 1; i < el.points.length; i += 1) {
+              ctx.lineTo(el.points[i].x, el.points[i].y);
+            }
+            ctx.stroke();
+          }
+
+          ctx.restore();
+        };
+
+        const redrawCanvas = () => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = '#166534';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+
+          const originX = 15;
+          const originY = 15;
+          const width = canvas.width - 30;
+          const height = canvas.height - 30;
+
+          if (fieldMode === 'full') {
+            ctx.strokeRect(originX, originY, width, height);
+            ctx.beginPath();
+            ctx.moveTo(originX, originY + height / 2);
+            ctx.lineTo(originX + width, originY + height / 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(originX + width / 2, originY + height / 2, 45, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(originX + width / 2, originY + height / 2, 3, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.strokeRect(originX + width / 2 - 70, originY, 140, 35);
+            ctx.strokeRect(originX + width / 2 - 70, originY + height - 35, 140, 35);
+          } else if (fieldMode === 'half') {
+            ctx.strokeRect(originX, originY, width, height);
+            ctx.strokeRect(originX + width / 2 - 90, originY, 180, 65);
+            ctx.strokeRect(originX + width / 2 - 45, originY, 90, 25);
+            ctx.beginPath();
+            ctx.arc(originX + width / 2, originY + 65, 45, 0, Math.PI);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(originX + width / 2, originY, 3, 0, 2 * Math.PI);
+            ctx.fill();
+          } else if (fieldMode === 'third') {
+            ctx.strokeRect(originX, originY, width, height);
+            ctx.strokeRect(originX + width / 2 - 100, originY, 200, 80);
+            ctx.strokeRect(originX + width / 2 - 45, originY, 90, 25);
+          }
+
+          if (showHalfSpaces) {
+            ctx.save();
+            const colWidth = width / 3;
+            const centralStartX = originX + colWidth;
+
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+            ctx.fillRect(centralStartX, originY, colWidth, height);
+
+            ctx.fillStyle = 'rgba(234, 179, 8, 0.1)';
+            ctx.fillRect(originX, originY, colWidth * 0.5, height);
+            ctx.fillRect(originX + colWidth * 2.5, originY, colWidth * 0.5, height);
+
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.6)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(originX + colWidth * 0.5, originY);
+            ctx.lineTo(originX + colWidth * 0.5, originY + height);
+            ctx.moveTo(centralStartX, originY);
+            ctx.lineTo(centralStartX, originY + height);
+            ctx.moveTo(centralStartX + colWidth, originY);
+            ctx.lineTo(centralStartX + colWidth, originY + height);
+            ctx.moveTo(originX + colWidth * 2.5, originY);
+            ctx.lineTo(originX + colWidth * 2.5, originY + height);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          if (showZones) {
+            ctx.save();
+            let rows = 6;
+            let cols = 3;
+            let startingZoneNumber = 1;
+
+            if (fieldMode === 'half') {
+              rows = 3;
+              cols = 3;
+              startingZoneNumber = 10;
+            } else if (fieldMode === 'third') {
+              rows = 2;
+              cols = 3;
+              startingZoneNumber = 13;
+            }
+
+            const colWidth = width / cols;
+            const rowHeight = height / rows;
+            let currentZone = startingZoneNumber;
+
+            for (let row = rows - 1; row >= 0; row -= 1) {
+              for (let col = 0; col < cols; col += 1) {
+                const zoneX = originX + col * colWidth;
+                const zoneY = originY + row * rowHeight;
+
+                ctx.fillStyle = (col + row) % 2 === 0 ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.04)';
+                if (currentZone === 17) ctx.fillStyle = 'rgba(220, 38, 38, 0.18)';
+                ctx.fillRect(zoneX, zoneY, colWidth, rowHeight);
+
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([3, 3]);
+                ctx.strokeRect(zoneX, zoneY, colWidth, rowHeight);
+
+                ctx.fillStyle = currentZone === 17 ? '#f87171' : 'rgba(255, 255, 255, 0.85)';
+                ctx.font = 'bold 13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(currentZone, zoneX + colWidth / 2, zoneY + rowHeight / 2);
+                currentZone += 1;
+              }
+            }
+            ctx.restore();
+          }
+
+          if (snapGrid && !isPrinting) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 0.5;
+            for (let x = 0; x < canvas.width; x += GRID_SIZE) {
+              ctx.beginPath();
+              ctx.moveTo(x, 0);
+              ctx.lineTo(x, canvas.height);
+              ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += GRID_SIZE) {
+              ctx.beginPath();
+              ctx.moveTo(0, y);
+              ctx.lineTo(canvas.width, y);
+              ctx.stroke();
+            }
+          }
+
+          if (onionSkin && currentFrameIdx > 0 && !isPlaying) {
+            const prevElements = frames[currentFrameIdx - 1] || [];
+            prevElements.forEach((el) => drawElement(ctx, el, false, 0.25));
+          }
+
+          elements.forEach((el, idx) => {
+            drawElement(ctx, el, !isPlaying && !isPrinting && dragState && dragState.index === idx, 1);
+          });
+
+          if (arrowStart && (tool === 'pass' || tool === 'dribble' || tool === 'player_move' || tool === 'ball_move')) {
+            ctx.save();
+            ctx.strokeStyle = tool === 'dribble' ? '#facc15' : tool === 'ball_move' ? '#f8fafc' : '#38bdf8';
+            ctx.lineWidth = 3;
+            if (tool === 'dribble') ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.moveTo(arrowStart.x, arrowStart.y);
+            ctx.lineTo(arrowStart.currentX || arrowStart.x, arrowStart.currentY || arrowStart.y);
+            ctx.stroke();
+            ctx.restore();
+          }
+        };
+
+        const handleSketchUpload = (event) => {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          const parsedFrames = [
+            [
+              { type: 'blue_player', x: 200, y: 220, label: '6', rotation: 0 },
+              { type: 'blue_player', x: 280, y: 160, label: '8', rotation: 0 },
+              { type: 'red_player', x: 260, y: 190, label: '4', rotation: 0 },
+              { type: 'pass', startX: 200, startY: 220, endX: 280, endY: 160 }
+            ],
+            [
+              { type: 'blue_player', x: 200, y: 220, label: '6', rotation: 0 },
+              { type: 'blue_player', x: 280, y: 160, label: '8', rotation: 0 },
+              { type: 'player_move', startX: 280, startY: 160, endX: 340, endY: 100 }
+            ],
+            [
+              { type: 'blue_player', x: 340, y: 100, label: '8', rotation: 0 },
+              { type: 'goal', x: 280, y: 40, rotation: 0 },
+              { type: 'dribble', startX: 280, startY: 160, endX: 280, endY: 60 }
+            ]
+          ];
+
+          setFrames(parsedFrames);
+          setCurrentFrameIdx(0);
+          alert('Hand-drawn sketch successfully scanned, vectorized, and converted into animated keyframes!');
+        };
+
+        const addFormationPreset = (formationType) => {
+          const cx = 280;
+          const cy = 160;
+          let newPlayers = [];
+
+          if (formationType === '4-3-3') {
+            newPlayers = [
+              { type: 'blue_player', x: cx, y: cy + 110, label: '1', rotation: 0 },
+              { type: 'blue_player', x: cx - 100, y: cy + 50, label: '2', rotation: 0 },
+              { type: 'blue_player', x: cx - 35, y: cy + 60, label: '4', rotation: 0 },
+              { type: 'blue_player', x: cx + 35, y: cy + 60, label: '5', rotation: 0 },
+              { type: 'blue_player', x: cx + 100, y: cy + 50, label: '3', rotation: 0 },
+              { type: 'blue_player', x: cx, y: cy, label: '6', rotation: 0 },
+              { type: 'blue_player', x: cx - 45, y: cy - 35, label: '8', rotation: 0 },
+              { type: 'blue_player', x: cx + 45, y: cy - 35, label: '10', rotation: 0 },
+              { type: 'blue_player', x: cx - 100, y: cy - 80, label: '7', rotation: 0 },
+              { type: 'blue_player', x: cx, y: cy - 90, label: '9', rotation: 0 },
+              { type: 'blue_player', x: cx + 100, y: cy - 80, label: '11', rotation: 0 }
             ];
+          } else if (formationType === '4-4-2') {
+            newPlayers = [
+              { type: 'blue_player', x: cx, y: cy + 110, label: '1', rotation: 0 },
+              { type: 'blue_player', x: cx - 100, y: cy + 50, label: '2', rotation: 0 },
+              { type: 'blue_player', x: cx - 35, y: cy + 60, label: '4', rotation: 0 },
+              { type: 'blue_player', x: cx + 35, y: cy + 60, label: '5', rotation: 0 },
+              { type: 'blue_player', x: cx + 100, y: cy + 50, label: '3', rotation: 0 },
+              { type: 'blue_player', x: cx - 100, y: cy, label: '7', rotation: 0 },
+              { type: 'blue_player', x: cx - 35, y: cy, label: '6', rotation: 0 },
+              { type: 'blue_player', x: cx + 35, y: cy, label: '8', rotation: 0 },
+              { type: 'blue_player', x: cx + 100, y: cy, label: '11', rotation: 0 },
+              { type: 'blue_player', x: cx - 30, y: cy - 80, label: '10', rotation: 0 },
+              { type: 'blue_player', x: cx + 30, y: cy - 80, label: '9', rotation: 0 }
+            ];
+          }
 
-            const [drillBank, setDrillBank] = React.useState(() => {
-                const saved = localStorage.getItem('pro_soccer_drills_v18');
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    const existingIds = new Set(parsed.map(d => d.id));
-                    const missingPresets = presetDrills.filter(p => !existingIds.has(p.id));
-                    return [...missingPresets, ...parsed];
-                }
-                return presetDrills;
-            });
+          setElements([...elements, ...newPlayers]);
+        };
 
-            const [sessionLibrary, setSessionLibrary] = React.useState(() => {
-                const saved = localStorage.getItem('pro_soccer_session_library_v18');
-                return saved ? JSON.parse(saved) : [];
-            });
+        const handleStart = (clientX, clientY) => {
+          if (isPlaying || isPrinting) return;
+          const canvas = canvasRef.current;
+          const rect = canvas.getBoundingClientRect();
+          const scaleX = canvas.width / rect.width;
+          const scaleY = canvas.height / rect.height;
+          const x = (clientX - rect.left) * scaleX;
+          const y = (clientY - rect.top) * scaleY;
 
-            const [roster, setRoster] = React.useState(() => {
-                const saved = localStorage.getItem('pro_soccer_roster_v18');
-                return saved ? JSON.parse(saved) : [
-                    { id: 1, name: 'Goalkeeper 1', number: '1', position: 'GK', status: 'Available', kpiNotes: 'Excellent distribution and shot stopping.' },
-                    { id: 2, name: 'Fullback 1', number: '2', position: 'RB', status: 'Available', kpiNotes: 'High work rate, strong 1v1 defensive duel success.' },
-                    { id: 3, name: 'Center Back 1', number: '4', position: 'CB', status: 'Available', kpiNotes: 'Dominant in aerial duels and build-up vision.' },
-                    { id: 4, name: 'Center Back 2', number: '5', position: 'CB', status: 'Available', kpiNotes: 'Good recovery speed and vocal leadership.' },
-                    { id: 5, name: 'Fullback 2', number: '3', position: 'LB', status: 'Available', kpiNotes: 'Effective overlapping runs in final third.' },
-                    { id: 6, name: 'Defensive Mid', number: '6', position: 'CDM', status: 'Available', kpiNotes: 'Elite interception stats and press resistance.' },
-                    { id: 7, name: 'Central Mid 1', number: '8', position: 'CM', status: 'Available', kpiNotes: 'Box-to-box engine, high passing accuracy.' },
-                    { id: 8, name: 'Attacking Mid', number: '10', position: 'CAM', status: 'Available', kpiNotes: 'Creative key passes and clinical finishing.' },
-                    { id: 9, name: 'Winger 1', number: '7', position: 'RW', status: 'Available', kpiNotes: 'Dangerous 1v1 isolation dribbler.' },
-                    { id: 10, name: 'Center Forward', number: '9', position: 'ST', status: 'Available', kpiNotes: 'Clinical finisher, exceptional movement off the shoulder.' },
-                    { id: 11, name: 'Winger 2', number: '11', position: 'LW', status: 'Available', kpiNotes: 'Direct pace, excellent tracking back.' }
-                ];
-            });
+          if (tool === 'erase') {
+            setElements((current) => current.filter((el) => {
+              if (el.x !== undefined) return Math.hypot(el.x - x, el.y - y) > 25;
+              if (el.points) return true;
+              return Math.hypot(el.startX - x, el.startY - y) > 25 && Math.hypot(el.endX - x, el.endY - y) > 25;
+            }));
+            return;
+          }
 
-            const [lineup, setLineup] = React.useState(() => {
-                const saved = localStorage.getItem('pro_soccer_lineup_v18');
-                return saved ? JSON.parse(saved) : { formation: '4-3-3', gk: '1', rb: '2', cb1: '4', cb2: '5', lb: '3', cdm: '6', cm1: '8', cm2: '10', rw: '7', st: '9', lw: '11', notes: '' };
-            });
+          if (tool === 'pass' || tool === 'dribble' || tool === 'player_move' || tool === 'ball_move') {
+            if (!arrowStart) {
+              setArrowStart({ x: snap(x), y: snap(y) });
+            } else {
+              const newEl = { type: tool, startX: arrowStart.x, startY: arrowStart.y, endX: snap(x), endY: snap(y) };
+              setElements([...elements, newEl]);
+              setArrowStart(null);
+            }
+            return;
+          }
 
-            React.useEffect(() => { localStorage.setItem('pro_soccer_session_v18', JSON.stringify(sessionData)); }, [sessionData]);
-            React.useEffect(() => { localStorage.setItem('pro_soccer_micro_v18', JSON.stringify(microcycle)); }, [microcycle]);
-            React.useEffect(() => { localStorage.setItem('pro_soccer_drills_v18', JSON.stringify(drillBank)); }, [drillBank]);
-            React.useEffect(() => { localStorage.setItem('pro_soccer_session_library_v18', JSON.stringify(sessionLibrary)); }, [sessionLibrary]);
-            React.useEffect(() => { localStorage.setItem('pro_soccer_roster_v18', JSON.stringify(roster)); }, [roster]);
-            React.useEffect(() => { localStorage.setItem('pro_soccer_lineup_v18', JSON.stringify(lineup)); }, [lineup]);
+          if (arrowStart) setArrowStart(null);
 
-            const handleChange = (e) => {
-                setSessionData({ ...sessionData, [e.target.name]: e.target.value });
-            };
+          if (tool === 'freehand') {
+            const newEl = { type: 'freehand', points: [{ x, y }] };
+            setElements([...elements, newEl]);
+            setDragState({ index: elements.length, type: 'freehand' });
+            return;
+          }
 
-            const toggleCollapse = (num) => {
-                setCollapsed({ ...collapsed, [num]: !collapsed[num] });
-            };
+          for (let i = elements.length - 1; i >= 0; i -= 1) {
+            const el = elements[i];
+            if (el.x !== undefined && el.y !== undefined) {
+              if (Math.hypot(el.x - x, el.y - y) < 20) {
+                setDragState({ index: i, type: 'item', offsetX: x - el.x, offsetY: y - el.y });
+                return;
+              }
+            } else if (el.startX !== undefined) {
+              if (Math.hypot(el.startX - x, el.startY - y) < 18) {
+                setDragState({ index: i, type: 'start' });
+                return;
+              }
+              if (Math.hypot(el.endX - x, el.endY - y) < 18) {
+                setDragState({ index: i, type: 'end' });
+                return;
+              }
+            }
+          }
 
-            const copyActivity = (sourceNum, targetNum) => {
-                setSessionData({
-                    ...sessionData,
-                    [`act${targetNum}Title`]: sessionData[`act${sourceNum}Title`] + ' (Copy)',
-                    [`act${targetNum}Duration`]: sessionData[`act${sourceNum}Duration`],
-                    [`act${targetNum}SetsReps`]: sessionData[`act${sourceNum}SetsReps`],
-                    [`act${targetNum}Explanation`]: sessionData[`act${sourceNum}Explanation`],
-                    [`act${targetNum}CoachingPoints`]: sessionData[`act${sourceNum}CoachingPoints`],
-                    [`act${targetNum}Progression`]: sessionData[`act${sourceNum}Progression`],
-                    [`act${targetNum}Canvas`]: JSON.parse(JSON.stringify(sessionData[`act${sourceNum}Canvas`]))
-                });
-                showToast(`Successfully copied Activity ${sourceNum} into Activity ${targetNum}!`);
-            };
+          if (tool === 'select') {
+            setDragState(null);
+            return;
+          }
 
-            const openSaveDrillModal = (num) => {
-                setDrillSaveTargetActivity(String(num));
-                setNewDrillTitle(sessionData[`act${num}Title`] || `Drill ${num}`);
-                setNewDrillCategory('Rondo & Technical');
-                setIsSaveDrillModalOpen(true);
-            };
+          if (tool === 'red_player' || tool === 'blue_player') {
+            const newEl = { type: tool, x: snap(x), y: snap(y), label: playerNumberInput, rotation: 0 };
+            setElements([...elements, newEl]);
+            setDragState({ index: elements.length, type: 'item', offsetX: 0, offsetY: 0 });
+          } else {
+            const newEl = { type: tool, x: snap(x), y: snap(y), rotation: 0 };
+            setElements([...elements, newEl]);
+            setDragState({ index: elements.length, type: 'item', offsetX: 0, offsetY: 0 });
+          }
+        };
 
-            const confirmSaveDrillToBank = () => {
-                const num = drillSaveTargetActivity;
-                const newDrill = {
-                    id: 'drill_' + Date.now(),
-                    title: newDrillTitle,
-                    category: newDrillCategory,
-                    explanation: sessionData[`act${num}Explanation`] || '',
-                    coachingPoints: sessionData[`act${num}CoachingPoints`] || '',
-                    canvas: JSON.parse(JSON.stringify(sessionData[`act${num}Canvas`] || {frames: [[]]}))
-                };
-                setDrillBank([...drillBank, newDrill]);
-                setIsSaveDrillModalOpen(false);
-                showToast(`Saved "${newDrill.title}" to your Drill Bank!`);
-            };
+        const handleMove = (clientX, clientY) => {
+          if (isPlaying || isPrinting) return;
+          const canvas = canvasRef.current;
+          const rect = canvas.getBoundingClientRect();
+          const scaleX = canvas.width / rect.width;
+          const scaleY = canvas.height / rect.height;
+          const x = (clientX - rect.left) * scaleX;
+          const y = (clientY - rect.top) * scaleY;
 
-            const loadDrillIntoActivity = (drill, targetNum) => {
-                setSessionData({
-                    ...sessionData,
-                    [`act${targetNum}Title`]: drill.title,
-                    [`act${targetNum}Explanation`]: drill.explanation,
-                    [`act${targetNum}CoachingPoints`]: drill.coachingPoints,
-                    [`act${targetNum}Canvas`]: JSON.parse(JSON.stringify(drill.canvas || {frames: [[]]}))
-                });
-                setViewMode('session');
-                showToast(`Loaded drill into Activity ${targetNum}!`);
-            };
+          if (arrowStart) {
+            setArrowStart((prev) => ({ ...prev, currentX: x, currentY: y }));
+          }
 
-            const saveCurrentSessionToLibrary = () => {
-                const sessionName = prompt("Enter a name for this session (e.g., Build-up Phase vs Low Block):", sessionData.team ? `${sessionData.team} - ${sessionData.date || 'Session'}` : 'Unnamed Session');
-                if (!sessionName) return;
+          if (!dragState) return;
 
-                const savedItem = {
-                    id: Date.now(),
-                    name: sessionName,
-                    savedAt: new Date().toLocaleDateString(),
-                    data: sessionData
-                };
+          const updated = [...elements];
+          const item = { ...updated[dragState.index] };
 
-                setSessionLibrary([...sessionLibrary, savedItem]);
-                showToast(`Successfully saved "${sessionName}" to Session Library!`);
-            };
+          if (dragState.type === 'freehand') {
+            item.points = [...item.points, { x, y }];
+          } else if (dragState.type === 'item') {
+            item.x = snap(x - dragState.offsetX);
+            item.y = snap(y - dragState.offsetY);
+          } else if (dragState.type === 'start') {
+            item.startX = snap(x);
+            item.startY = snap(y);
+          } else if (dragState.type === 'end') {
+            item.endX = snap(x);
+            item.endY = snap(y);
+          }
 
-            const loadSessionFromLibrary = (libItem) => {
-                setSessionData(libItem.data);
-                setViewMode('session');
-                showToast(`Loaded session "${libItem.name}"!`);
-            };
+          updated[dragState.index] = item;
+          setElements(updated);
+        };
 
-            const deleteSessionFromLibrary = (id, e) => {
-                e.stopPropagation();
-                if (confirm("Are you sure you want to delete this saved session?")) {
-                    setSessionLibrary(sessionLibrary.filter(item => item.id !== id));
-                    showToast("Deleted session from library.");
-                }
-            };
+        const rotateSelectedGoal = () => {
+          if (dragState === null || isPlaying || isPrinting) return;
+          const updated = [...elements];
+          const item = updated[dragState.index];
+          if (item && item.type === 'goal') {
+            item.rotation = (item.rotation || 0) + Math.PI / 2;
+            setElements(updated);
+          }
+        };
 
-            const applyTacticalTag = (num, tagText) => {
-                const key = `act${num}CoachingPoints`;
-                const current = sessionData[key];
-                const updated = current ? `${current}\n• ${tagText}` : `• ${tagText}`;
-                setSessionData({ ...sessionData, [key]: updated });
-                showToast(`Added tag: "${tagText}"`);
-            };
+        const addFrame = () => {
+          const nextFrames = [...frames, cloneData(elements)];
+          setFrames(nextFrames);
+          setCurrentFrameIdx(nextFrames.length - 1);
+        };
 
-            const commonTags = ["Third-man runs", "Pressing triggers", "Width & Depth", "Counter-pressing", "Compact defensive block", "Quick ball circulation", "Vertical penetration"];
+        const deleteCurrentFrame = () => {
+          if (frames.length <= 1) return;
+          const updated = frames.filter((_, idx) => idx !== currentFrameIdx);
+          setFrames(updated);
+          setCurrentFrameIdx(Math.max(0, currentFrameIdx - 1));
+        };
 
-            const handlePrint = () => {
-                setIsPrinting(true);
-                setCollapsed({ 1: false, 2: false, 3: false, 4: false });
-                setTimeout(() => {
-                    window.print();
-                    setIsPrinting(false);
-                }, 300);
-            };
+        return (
+          <div className="flex w-full flex-col items-center rounded-xl border border-slate-800 bg-slate-900 p-3 text-white shadow-lg print:bg-white print:text-slate-900 print:border-none print:shadow-none">
+            {!isPrinting && (
+              <>
+                <div className="mb-2 flex w-full flex-wrap items-center justify-between gap-1.5 text-xs print:hidden">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tool:</span>
+                    {TOOL_BUTTONS.map((button) => (
+                      <button
+                        key={button.value}
+                        type="button"
+                        onClick={() => setTool(button.value)}
+                        className={`rounded px-2 py-1 font-medium transition ${
+                          tool === button.value
+                            ? button.value === 'pass'
+                              ? 'bg-white text-slate-950 font-bold shadow'
+                              : button.value === 'dribble'
+                                ? 'bg-amber-400 text-slate-950 font-bold shadow'
+                                : button.value === 'player_move'
+                                  ? 'bg-sky-400 text-slate-950 font-bold shadow'
+                                  : button.value === 'ball_move'
+                                    ? 'bg-slate-200 text-slate-950 font-bold shadow'
+                                    : button.value === 'freehand'
+                                      ? 'bg-cyan-500 text-slate-950 font-bold shadow'
+                                      : button.value === 'red_player'
+                                        ? 'bg-red-600 text-white font-bold shadow'
+                                        : button.value === 'blue_player'
+                                          ? 'bg-blue-600 text-white font-bold shadow'
+                                          : button.value === 'cone'
+                                            ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                                            : button.value === 'pole'
+                                              ? 'bg-slate-200 text-slate-950 font-bold shadow'
+                                              : button.value === 'goal'
+                                                ? 'bg-slate-200 text-slate-950 font-bold shadow'
+                                                : button.value === 'erase'
+                                                  ? 'bg-orange-600 text-white font-bold shadow'
+                                                  : 'bg-emerald-500 text-slate-950 font-bold shadow'
+                            : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                        }`}
+                      >
+                        {button.label}
+                      </button>
+                    ))}
 
-            const handlePdfDownload = () => {
-                setIsPrinting(true);
-                setCollapsed({ 1: false, 2: false, 3: false, 4: false });
-                const element = document.getElementById('session-sheet-container');
-                const opt = {
-                    margin:       0.5,
-                    filename:     `${sessionData.team || 'Training'}_Session_Plan.pdf`,
-                    image:        { type: 'jpeg', quality: 0.98 },
-                    html2canvas:  { scale: 2, useCORS: true },
-                    jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-                };
-                setTimeout(() => {
-                    html2pdf().from(element).set(opt).save().then(() => {
-                        setIsPrinting(false);
-                        showToast("PDF Downloaded successfully!");
-                    });
-                }, 400);
-            };
-
-            return (
-                <div className="max-w-6xl mx-auto p-4 sm:p-6 relative">
-                    {toast && (
-                        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-emerald-500 text-xs font-bold animate-bounce flex items-center gap-2">
-                            <span className="text-emerald-400 text-sm">✔</span> {toast}
-                        </div>
-                    )}
-
-                    {fullscreenCanvas !== null && (
-                        <div className="fixed inset-0 z-50 bg-slate-950/90 flex flex-col items-center justify-center p-4">
-                            <div className="w-full max-w-4xl bg-slate-900 p-4 rounded-xl border border-slate-700 flex flex-col items-center">
-                                <div className="flex justify-between w-full items-center mb-3">
-                                    <h3 className="font-bold text-white text-sm">Fullscreen Animated Pitch Editor — Activity {fullscreenCanvas}</h3>
-                                    <button onClick={() => setFullscreenCanvas(null)} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-bold transition">Close ✕</button>
-                                </div>
-                                <div className="w-full flex justify-center">
-                                    <div className="w-full max-w-[720px]">
-                                        <TacticalSketchpad 
-                                            initialData={sessionData[`act${fullscreenCanvas}Canvas`]}
-                                            onSave={(data) => {
-                                                setSessionData(prev => ({ ...prev, [`act${fullscreenCanvas}Canvas`]: data }));
-                                            }}
-                                            isPrinting={false}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeDrillModal && (
-                        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-300 flex flex-col gap-4">
-                                <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                                    <div>
-                                        <span className="text-[10px] uppercase font-black text-emerald-700 tracking-wider bg-emerald-100 px-2 py-0.5 rounded-full">{activeDrillModal.category || 'Custom Drill'}</span>
-                                        <h3 className="text-lg font-black text-slate-900 mt-1">{activeDrillModal.title}</h3>
-                                    </div>
-                                    <button onClick={() => setActiveDrillModal(null)} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold w-8 h-8 rounded-full flex items-center justify-center transition">✕</button>
-                                </div>
-
-                                <div className="space-y-3 text-xs">
-                                    <div>
-                                        <strong className="block text-slate-500 uppercase tracking-wider text-[10px] mb-1">Organization / Explanation:</strong>
-                                        <p className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-800 font-medium whitespace-pre-wrap">{activeDrillModal.explanation || 'No description provided.'}</p>
-                                    </div>
-                                    <div>
-                                        <strong className="block text-slate-500 uppercase tracking-wider text-[10px] mb-1">Coaching Points:</strong>
-                                        <p className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-800 font-medium whitespace-pre-wrap">{activeDrillModal.coachingPoints || 'No coaching points listed.'}</p>
-                                    </div>
-                                </div>
-
-                                <div className="border-t border-slate-200 pt-4 flex justify-between items-center">
-                                    <span className="text-[11px] text-slate-500 font-bold">Load into active session:</span>
-                                    <div className="flex gap-1.5">
-                                        {[1, 2, 3, 4].map(num => (
-                                            <button key={num} onClick={() => { loadDrillIntoActivity(activeDrillModal, num); setActiveDrillModal(null); }} className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition">Act {num}</button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {isSaveDrillModalOpen && (
-                        <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-300 flex flex-col gap-4">
-                                <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                                    <h3 className="text-base font-black text-slate-900">Save Drill to Library</h3>
-                                    <button onClick={() => setIsSaveDrillModalOpen(false)} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold w-8 h-8 rounded-full flex items-center justify-center transition">✕</button>
-                                </div>
-
-                                <div className="space-y-3 text-xs">
-                                    <div>
-                                        <label className="block font-bold text-slate-700 mb-1">Drill Title</label>
-                                        <input type="text" value={newDrillTitle} onChange={(e) => setNewDrillTitle(e.target.value)} className="w-full border border-slate-300 p-2.5 rounded-lg font-bold text-slate-900 focus:outline-none" />
-                                    </div>
-                                    <div>
-                                        <label className="block font-bold text-slate-700 mb-1">Category</label>
-                                        <select value={newDrillCategory} onChange={(e) => setNewDrillCategory(e.target.value)} className="w-full border border-slate-300 p-2.5 rounded-lg font-bold text-slate-900 bg-white focus:outline-none">
-                                            <option value="Rondo & Technical">Rondo & Technical</option>
-                                            <option value="Build-up & Possession">Build-up & Possession</option>
-                                            <option value="Pressing & Defense">Pressing & Defense</option>
-                                            <option value="Attacking & Finishing">Attacking & Finishing</option>
-                                            <option value="Conditioned Games">Conditioned Games</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block font-bold text-slate-700 mb-1">Source Activity</label>
-                                        <select value={drillSaveTargetActivity} onChange={(e) => {
-                                            const num = e.target.value;
-                                            setDrillSaveTargetActivity(num);
-                                            setNewDrillTitle(sessionData[`act${num}Title`] || `Drill ${num}`);
-                                        }} className="w-full border border-slate-300 p-2.5 rounded-lg font-bold text-slate-900 bg-white focus:outline-none">
-                                            <option value="1">Activity 1: {sessionData.act1Title}</option>
-                                            <option value="2">Activity 2: {sessionData.act2Title}</option>
-                                            <option value="3">Activity 3: {sessionData.act3Title}</option>
-                                            <option value="4">Activity 4: {sessionData.act4Title}</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="border-t border-slate-200 pt-4 flex justify-end gap-2">
-                                    <button onClick={() => setIsSaveDrillModalOpen(false)} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-2 rounded-lg text-xs transition">Cancel</button>
-                                    <button onClick={confirmSaveDrillToBank} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2 rounded-lg text-xs shadow transition">Save Drill</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="flex flex-wrap justify-between items-center mb-6 bg-white p-5 rounded-xl shadow-md border border-slate-200 print:hidden gap-3">
-                        <div>
-                            <div className="flex items-center gap-2 mb-1">
-                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block"></span>
-                                <h1 className="font-black tracking-wider uppercase text-slate-900 text-base sm:text-lg">Pro Session Planner & Club Suite</h1>
-                            </div>
-                            <p className="text-xs text-slate-500">Periodized session sheets, animated diagrams, squad roster, and starting XI lineup.</p>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5 items-center">
-                            <button onClick={() => setViewMode('session')} className={`px-3.5 py-2 rounded-lg text-xs font-bold transition shadow-sm ${viewMode === 'session' ? 'bg-emerald-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Session Sheet</button>
-                            <button onClick={() => setViewMode('microcycle')} className={`px-3.5 py-2 rounded-lg text-xs font-bold transition shadow-sm ${viewMode === 'microcycle' ? 'bg-emerald-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Micro-cycle</button>
-                            <button onClick={() => setViewMode('roster')} className={`px-3.5 py-2 rounded-lg text-xs font-bold transition shadow-sm ${viewMode === 'roster' ? 'bg-emerald-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Roster ({roster.length})</button>
-                            <button onClick={() => setViewMode('lineup')} className={`px-3.5 py-2 rounded-lg text-xs font-bold transition shadow-sm ${viewMode === 'lineup' ? 'bg-emerald-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Lineup</button>
-                            <button onClick={() => setViewMode('drillbank')} className={`px-3.5 py-2 rounded-lg text-xs font-bold transition shadow-sm ${viewMode === 'drillbank' ? 'bg-emerald-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Drills ({drillBank.length})</button>
-                            <button onClick={() => setViewMode('sessionlibrary')} className={`px-3.5 py-2 rounded-lg text-xs font-bold transition shadow-sm ${viewMode === 'sessionlibrary' ? 'bg-emerald-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>Library ({sessionLibrary.length})</button>
-                            <button onClick={handlePdfDownload} className="bg-emerald-800 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-lg text-xs transition shadow-md flex items-center gap-1.5 ml-1">
-                                📥 PDF Download
-                            </button>
-                            <button onClick={handlePrint} className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-2 rounded-lg text-xs transition shadow-md flex items-center gap-1.5">
-                                🖨️ Print
-                            </button>
-                        </div>
+                    <div className="flex items-center rounded border border-slate-700 bg-slate-800 px-2 py-0.5">
+                      <span className="mr-1 text-[10px] font-bold text-slate-400">No:</span>
+                      <input
+                        type="text"
+                        value={playerNumberInput}
+                        onChange={(event) => setPlayerNumberInput(event.target.value)}
+                        className="w-6 rounded bg-slate-900 text-center text-white"
+                      />
                     </div>
+                  </div>
 
-                    {viewMode === 'session' && (
-                        <div>
-                            <div className="flex justify-between items-center mb-4 print:hidden">
-                                <div className="text-xs text-slate-600 font-medium">Tip: Click <strong>PDF Download</strong> or <strong>Print</strong> to generate a clean, professional coaching document with all editing toolbars automatically hidden.</div>
-                                <button onClick={saveCurrentSessionToLibrary} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2 rounded-lg text-xs shadow flex items-center gap-1.5 transition">
-                                    💾 Save Session to Library
-                                </button>
-                            </div>
-
-                            <div id="session-sheet-container" className="bg-white border-2 border-slate-900 print:border-slate-800 shadow-2xl p-6 sm:p-10 rounded-xl print:shadow-none print:border print:p-6">
-                                <div className="border-b-2 border-slate-900 pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2">
-                                    <div>
-                                        <input type="text" name="clubName" value={sessionData.clubName} onChange={handleChange} className="font-black text-xs uppercase tracking-widest text-emerald-700 bg-transparent focus:outline-none w-full" />
-                                        <h2 className="text-xl sm:text-2xl font-black uppercase text-slate-900 tracking-tight">Tactical Training Session Plan</h2>
-                                    </div>
-                                    <div className="text-right sm:text-right w-full sm:w-auto">
-                                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">Head Coach / Technical Director</span>
-                                        <span className="text-xs font-bold text-slate-800">Professional Curriculum Framework</span>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-3 border-2 border-slate-900 print:border-slate-800 bg-red-900 text-white text-xs mb-6 text-center font-bold rounded-lg overflow-hidden shadow-sm">
-                                    <div className="p-3 border-b sm:border-b-0 sm:border-r border-red-800 flex flex-col print:bg-red-900">
-                                        <span className="block text-red-200 uppercase tracking-widest text-[10px] mb-1 font-black">Manage Oneself</span>
-                                        <input type="text" name="manageOneself" placeholder="Enter principles..." value={sessionData.manageOneself} onChange={handleChange} className="w-full bg-red-950/80 text-white text-center text-xs p-1.5 rounded border border-red-800 focus:outline-none placeholder-red-300 font-semibold print:bg-transparent print:border-none" />
-                                    </div>
-                                    <div className="p-3 border-b sm:border-b-0 sm:border-r border-red-800 flex flex-col print:bg-red-900">
-                                        <span className="block text-red-200 uppercase tracking-widest text-[10px] mb-1 font-black">Manage Space</span>
-                                        <input type="text" name="manageSpace" placeholder="Enter principles..." value={sessionData.manageSpace} onChange={handleChange} className="w-full bg-red-950/80 text-white text-center text-xs p-1.5 rounded border border-red-800 focus:outline-none placeholder-red-300 font-semibold print:bg-transparent print:border-none" />
-                                    </div>
-                                    <div className="p-3 flex flex-col print:bg-red-900">
-                                        <span className="block text-red-200 uppercase tracking-widest text-[10px] mb-1 font-black">Manage The Ball</span>
-                                        <input type="text" name="manageTheBall" placeholder="Enter principles..." value={sessionData.manageTheBall} onChange={handleChange} className="w-full bg-red-950/80 text-white text-center text-xs p-1.5 rounded border border-red-800 focus:outline-none placeholder-red-300 font-semibold print:bg-transparent print:border-none" />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 mb-8 text-xs">
-                                    <div className="border border-slate-300 p-2.5 bg-slate-50 rounded-lg shadow-sm"><span className="block font-extrabold text-slate-400 text-[9px] uppercase tracking-wider">Team</span><input type="text" name="team" placeholder="Type team..." value={sessionData.team} onChange={handleChange} className="w-full font-bold text-slate-900 bg-transparent focus:outline-none text-xs" /></div>
-                                    <div className="border border-slate-300 p-2.5 bg-slate-50 rounded-lg shadow-sm"><span className="block font-extrabold text-slate-400 text-[9px] uppercase tracking-wider">Date</span><input type="date" name="date" value={sessionData.date} onChange={handleChange} className="w-full font-bold text-slate-900 bg-transparent focus:outline-none text-xs" /></div>
-                                    <div className="border border-slate-300 p-2.5 bg-slate-50 rounded-lg shadow-sm"><span className="block font-extrabold text-slate-400 text-[9px] uppercase tracking-wider">Time</span><input type="text" name="sessionTime" placeholder="16:00" value={sessionData.sessionTime} onChange={handleChange} className="w-full font-bold text-slate-900 bg-transparent focus:outline-none text-xs" /></div>
-                                    <div className="border border-slate-300 p-2.5 bg-slate-50 rounded-lg shadow-sm"><span className="block font-extrabold text-slate-400 text-[9px] uppercase tracking-wider">Space</span><input type="text" name="totalSpace" placeholder="Half Pitch" value={sessionData.totalSpace} onChange={handleChange} className="w-full font-bold text-slate-900 bg-transparent focus:outline-none text-xs" /></div>
-                                    <div className="border border-slate-300 p-2.5 bg-slate-50 rounded-lg shadow-sm"><span className="block font-extrabold text-slate-400 text-[9px] uppercase tracking-wider">Load</span>
-                                        <select name="load" value={sessionData.load} onChange={handleChange} className="w-full font-bold text-slate-900 bg-transparent focus:outline-none text-xs">
-                                            <option value="Low">Low</option>
-                                            <option value="Moderate">Moderate</option>
-                                            <option value="High">High</option>
-                                            <option value="Max">Max</option>
-                                        </select>
-                                    </div>
-                                    <div className="border border-slate-300 p-2.5 bg-slate-50 rounded-lg shadow-sm"><span className="block font-extrabold text-slate-400 text-[9px] uppercase tracking-wider">Duration</span><input type="text" name="sessionDuration" placeholder="90m" value={sessionData.sessionDuration} onChange={handleChange} className="w-full font-bold text-slate-900 bg-transparent focus:outline-none text-xs" /></div>
-                                </div>
-
-                                <div className="flex flex-col gap-6">
-                                    {[1, 2, 3, 4].map((num) => {
-                                        const titleKey = `act${num}Title`;
-                                        const durKey = `act${num}Duration`;
-                                        const setsKey = `act${num}SetsReps`;
-                                        const expKey = `act${num}Explanation`;
-                                        const cpKey = `act${num}CoachingPoints`;
-                                        const progKey = `act${num}Progression`;
-                                        const canvasKey = `act${num}Canvas`;
-
-                                        return (
-                                            <div key={num} className="border-2 border-slate-800 bg-slate-50/70 print:bg-white flex flex-col rounded-xl overflow-hidden shadow-sm">
-                                                <div className="bg-slate-900 print:bg-slate-800 text-white p-3.5 font-bold text-sm flex justify-between items-center flex-wrap gap-2">
-                                                    <input type="text" name={titleKey} value={sessionData[titleKey]} onChange={handleChange} className="bg-transparent text-white font-bold w-1/2 focus:outline-none border-b border-slate-700 text-sm tracking-wide" />
-                                                    <div className="flex gap-2.5 items-center text-xs font-normal flex-wrap">
-                                                        <span>Dur: <input type="text" name={durKey} placeholder="15m" value={sessionData[durKey]} onChange={handleChange} className="bg-slate-800 print:bg-slate-700 px-2 py-0.5 rounded w-12 text-white text-center font-bold focus:outline-none" /></span>
-                                                        <span>Sets: <input type="text" name={setsKey} placeholder="3x4m" value={sessionData[setsKey]} onChange={handleChange} className="bg-slate-800 print:bg-slate-700 px-2 py-0.5 rounded w-16 text-white text-center font-bold focus:outline-none" /></span>
-                                                        
-                                                        <select onChange={(e) => { if(e.target.value) copyActivity(e.target.value, num); e.target.value=""; }} defaultValue="" className="bg-slate-800 text-white px-2 py-1 rounded text-xs print:hidden">
-                                                            <option value="" disabled>Copy from...</option>
-                                                            {[1, 2, 3, 4].filter(n => n !== num).map(n => <option key={n} value={n}>Act {n}</option>)}
-                                                        </select>
-
-                                                        <button onClick={() => openSaveDrillModal(num)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded text-xs font-semibold print:hidden transition">Save to Bank</button>
-                                                        <button onClick={() => toggleCollapse(num)} className="bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded text-xs print:hidden transition">{collapsed[num] ? 'Expand +' : 'Collapse -'}</button>
-                                                    </div>
-                                                </div>
-
-                                                {!collapsed[num] && (
-                                                    <div className="p-4 sm:p-5 text-xs flex flex-col gap-4 flex-grow">
-                                                        <div className="flex flex-col lg:flex-row gap-6 items-start">
-                                                            <div className="w-full lg:w-5/12 space-y-3.5 flex flex-col justify-between">
-                                                                <div className="space-y-3.5">
-                                                                    <div>
-                                                                        <label className="block font-black text-slate-700 mb-1 uppercase text-[10px] tracking-wider">Organization / Explanation</label>
-                                                                        <textarea name={expKey} placeholder="Type explanation..." value={sessionData[expKey]} onChange={handleChange} className="w-full border border-slate-300 p-3 rounded-lg h-24 bg-white print:bg-slate-50 focus:outline-none text-xs shadow-sm font-medium text-slate-800"></textarea>
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="block font-black text-slate-700 uppercase text-[10px] tracking-wider mb-1">Coaching Points</label>
-                                                                        <textarea name={cpKey} placeholder="Type coaching points..." value={sessionData[cpKey]} onChange={handleChange} className="w-full border border-slate-300 p-3 rounded-lg h-20 bg-white print:bg-slate-50 focus:outline-none text-xs shadow-sm mb-1.5 font-medium text-slate-800"></textarea>
-                                                                        
-                                                                        <div className="flex flex-wrap gap-1 print:hidden">
-                                                                            <span className="text-[10px] text-slate-400 font-bold self-center mr-1">Quick Tag:</span>
-                                                                            {commonTags.slice(0, 4).map((tag, i) => (
-                                                                                <button key={i} onClick={() => applyTacticalTag(num, tag)} className="bg-slate-200 hover:bg-emerald-200 text-slate-700 px-2 py-0.5 rounded text-[10px] font-semibold transition">{tag}</button>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="block font-black text-slate-700 mb-1 uppercase text-[10px] tracking-wider">Progression</label>
-                                                                        <input type="text" name={progKey} placeholder="Type progression..." value={sessionData[progKey]} onChange={handleChange} className="w-full border border-slate-300 p-2.5 rounded-lg bg-white print:bg-slate-50 focus:outline-none text-xs shadow-sm font-medium text-slate-800" />
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <div className="w-full lg:w-7/12 flex flex-col items-center">
-                                                                <div className="flex justify-between w-full items-center mb-1.5 px-1 print:hidden">
-                                                                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Animated Pitch Creator</span>
-                                                                    <button onClick={() => setFullscreenCanvas(num)} className="bg-slate-900 hover:bg-slate-800 text-white px-2.5 py-1 rounded text-[11px] font-bold transition">⛶ Fullscreen Editor</button>
-                                                                </div>
-                                                                <div className="w-full flex justify-center">
-                                                                    <TacticalSketchpad 
-                                                                        initialData={sessionData[canvasKey]} 
-                                                                        onSave={(data) => {
-                                                                            setSessionData(prev => ({ ...prev, [canvasKey]: data }));
-                                                                        }}
-                                                                        onFullscreen={() => setFullscreenCanvas(num)}
-                                                                        isPrinting={isPrinting}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
+                  <div className="flex gap-2">
+                    {onFullscreen && (
+                      <button
+                        type="button"
+                        onClick={onFullscreen}
+                        className="rounded bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white shadow transition hover:bg-indigo-500"
+                      >
+                        ⛶ Fullscreen
+                      </button>
                     )}
-
-                    {viewMode === 'microcycle' && (
-                        <div className="bg-white border-2 border-slate-900 shadow-xl p-6 sm:p-8 rounded-xl">
-                            <h2 className="text-lg font-black uppercase text-slate-900 mb-1">7-Day Tactical & Physical Microcycle</h2>
-                            <p className="text-xs text-slate-500 mb-6">Map out weekly periodization, training loads, and objectives.</p>
-                            <div className="space-y-3">
-                                {microcycle.map((dayObj, index) => (
-                                    <div key={index} className="flex flex-col sm:flex-row items-center gap-3 border border-slate-200 p-3.5 rounded-xl bg-slate-50 shadow-sm">
-                                        <div className="w-32 font-black text-slate-900 text-sm">{dayObj.day}</div>
-                                        <input type="text" value={dayObj.focus} onChange={(e) => {
-                                            const updated = [...microcycle];
-                                            updated[index].focus = e.target.value;
-                                            setMicrocycle(updated);
-                                        }} placeholder="Session Focus..." className="flex-grow border border-slate-300 p-2.5 rounded-lg text-xs bg-white w-full shadow-sm font-semibold" />
-                                        <select value={dayObj.load} onChange={(e) => {
-                                            const updated = [...microcycle];
-                                            updated[index].load = e.target.value;
-                                            setMicrocycle(updated);
-                                        }} className="border border-slate-300 p-2.5 rounded-lg text-xs bg-white font-bold w-full sm:w-auto shadow-sm">
-                                            <option value="None">None</option>
-                                            <option value="Low">Low Load</option>
-                                            <option value="Moderate">Moderate Load</option>
-                                            <option value="High">High Load</option>
-                                            <option value="Max">Max / Match</option>
-                                        </select>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {viewMode === 'roster' && (
-                        <div className="bg-white border-2 border-slate-900 shadow-xl p-6 sm:p-8 rounded-xl">
-                            <div className="flex justify-between items-center mb-6">
-                                <div>
-                                    <h2 className="text-lg font-black uppercase text-slate-900 mb-1">Squad Roster & Player KPIs</h2>
-                                    <p className="text-xs text-slate-500">Manage player numbers, positions, fitness readiness status, and performance notes.</p>
-                                </div>
-                                <button onClick={() => {
-                                    const name = prompt("Player Name:");
-                                    const number = prompt("Jersey Number:");
-                                    const position = prompt("Position (e.g. CB, CM, ST):");
-                                    if(name) {
-                                        setRoster([...roster, { id: Date.now(), name, number: number || '#', position: position || 'UTL', status: 'Available', kpiNotes: '' }]);
-                                        showToast("Added player to roster!");
-                                    }
-                                }} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2 rounded-lg text-xs shadow transition">＋ Add Player</button>
-                            </div>
-                            <div className="space-y-4">
-                                {roster.map((player) => (
-                                    <div key={player.id} className="border border-slate-200 p-4 rounded-xl bg-slate-50 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-                                        <div className="flex items-center gap-3">
-                                            <span className="w-8 h-8 rounded-full bg-slate-900 text-white font-black flex items-center justify-center text-xs">{player.number}</span>
-                                            <div>
-                                                <h3 className="font-extrabold text-slate-900 text-sm">{player.name}</h3>
-                                                <span className="text-[11px] font-bold text-slate-500 uppercase">{player.position}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                                            <select value={player.status} onChange={(e) => {
-                                                const updated = roster.map(p => p.id === player.id ? { ...p, status: e.target.value } : p);
-                                                setRoster(updated);
-                                            }} className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] shadow-sm ${player.status === 'Available' ? 'bg-emerald-100 text-emerald-800' : player.status === 'Injured' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>
-                                                <option value="Available">Available</option>
-                                                <option value="Limited">Limited / Load Mgmt</option>
-                                                <option value="Injured">Injured</option>
-                                            </select>
-                                            <input 
-                                                type="text" 
-                                                value={player.kpiNotes || ''} 
-                                                onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    setRoster(roster.map(p => p.id === player.id ? { ...p, kpiNotes: val } : p));
-                                                }}
-                                                placeholder="Performance KPI / evaluation notes..." 
-                                                className="border border-slate-300 p-2 rounded-lg text-xs bg-white w-full md:w-64 font-medium shadow-sm"
-                                            />
-                                            <button onClick={() => {
-                                                setRoster(roster.filter(p => p.id !== player.id));
-                                                showToast("Removed player.");
-                                            }} className="text-red-600 hover:text-red-800 font-bold text-xs px-2 py-1 transition">Delete</button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {viewMode === 'lineup' && (
-                        <div className="bg-white border-2 border-slate-900 shadow-xl p-6 sm:p-8 rounded-xl">
-                            <h2 className="text-lg font-black uppercase text-slate-900 mb-1">Match Day Starting XI & Lineup</h2>
-                            <p className="text-xs text-slate-500 mb-6">Select players from your roster for tactical formations and matchday roles.</p>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-3 bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-sm">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="font-black text-xs uppercase text-slate-700 tracking-wider">Formation Preset</span>
-                                        <select value={lineup.formation} onChange={(e) => setLineup({ ...lineup, formation: e.target.value })} className="border border-slate-300 p-2 rounded-lg text-xs font-bold bg-white shadow-sm">
-                                            <option value="4-3-3">4-3-3</option>
-                                            <option value="4-4-2">4-4-2</option>
-                                            <option value="3-5-2">3-5-2</option>
-                                        </select>
-                                    </div>
-                                    
-                                    {['gk', 'rb', 'cb1', 'cb2', 'lb', 'cdm', 'cm1', 'cm2', 'rw', 'st', 'lw'].map((posKey) => (
-                                        <div key={posKey} className="flex justify-between items-center gap-2">
-                                            <span className="font-black text-xs uppercase w-16 text-slate-600 tracking-wider">{posKey}:</span>
-                                            <select value={lineup[posKey]} onChange={(e) => setLineup({ ...lineup, [posKey]: e.target.value })} className="flex-grow border border-slate-300 p-2 rounded-lg text-xs bg-white font-semibold shadow-sm">
-                                                <option value="">Select player...</option>
-                                                {roster.map(p => <option key={p.id} value={p.number}>{p.number}. {p.name} ({p.position})</option>)}
-                                            </select>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                <div className="flex flex-col gap-4">
-                                    <div className="bg-slate-900 text-white p-6 rounded-xl shadow-inner flex flex-col items-center justify-center text-center border border-slate-800">
-                                        <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-black mb-1">Active Formation</span>
-                                        <h3 className="text-3xl font-black mb-1">{lineup.formation}</h3>
-                                        <p className="text-xs text-slate-400 font-medium">Linked directly with squad jersey numbers and tactical roles.</p>
-                                    </div>
-                                    <div className="flex-grow flex flex-col">
-                                        <label className="block font-black text-slate-700 mb-1 uppercase text-xs tracking-wider">Matchday Tactical Instructions / Set-Piece Notes</label>
-                                        <textarea value={lineup.notes} onChange={(e) => setLineup({ ...lineup, notes: e.target.value })} placeholder="Type tactical instructions..." className="w-full border border-slate-300 p-3.5 rounded-xl h-32 text-xs bg-slate-50 focus:outline-none font-medium shadow-sm"></textarea>
-                                    </div>
-                                    <button onClick={() => showToast("Lineup saved successfully!")} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-xl text-xs shadow-md transition">Save Lineup</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {viewMode === 'drillbank' && (
-                        <div className="bg-white border-2 border-slate-900 shadow-xl p-6 sm:p-8 rounded-xl">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                                <div>
-                                    <h2 className="text-lg font-black uppercase text-slate-900 mb-1">Drill Bank & Club Library</h2>
-                                    <p className="text-xs text-slate-500">Filter, search, preview, and load preset or custom exercises into session sheets.</p>
-                                </div>
-                                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                                    <input 
-                                        type="text" 
-                                        placeholder="Search drills..." 
-                                        value={drillSearchQuery} 
-                                        onChange={(e) => setDrillSearchQuery(e.target.value)}
-                                        className="border border-slate-300 p-2 rounded-lg text-xs bg-slate-50 font-medium w-full sm:w-48 shadow-sm focus:outline-none" 
-                                    />
-                                    <select 
-                                        value={selectedDrillCategory} 
-                                        onChange={(e) => setSelectedDrillCategory(e.target.value)}
-                                        className="border border-slate-300 p-2 rounded-lg text-xs bg-white font-bold shadow-sm focus:outline-none"
-                                    >
-                                        <option value="All">All Categories</option>
-                                        <option value="Rondo & Technical">Rondo & Technical</option>
-                                        <option value="Build-up & Possession">Build-up & Possession</option>
-                                        <option value="Pressing & Defense">Pressing & Defense</option>
-                                        <option value="Attacking & Finishing">Attacking & Finishing</option>
-                                        <option value="Conditioned Games">Conditioned Games</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            {drillBank.filter(d => {
-                                const matchesCat = selectedDrillCategory === 'All' || d.category === selectedDrillCategory;
-                                const matchesSearch = d.title.toLowerCase().includes(drillSearchQuery.toLowerCase()) || (d.explanation && d.explanation.toLowerCase().includes(drillSearchQuery.toLowerCase()));
-                                return matchesCat && matchesSearch;
-                            }).length === 0 ? (
-                                <p className="text-sm text-slate-500 italic bg-slate-50 p-6 rounded-xl border border-dashed border-slate-300 text-center">No drills found matching your criteria.</p>
-                            ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {drillBank.filter(d => {
-                                        const matchesCat = selectedDrillCategory === 'All' || d.category === selectedDrillCategory;
-                                        const matchesSearch = d.title.toLowerCase().includes(drillSearchQuery.toLowerCase()) || (d.explanation && d.explanation.toLowerCase().includes(drillSearchQuery.toLowerCase()));
-                                        return matchesCat && matchesSearch;
-                                    }).map((drill) => (
-                                        <div key={drill.id} className="border border-slate-200 rounded-xl p-4.5 bg-slate-50 flex flex-col justify-between shadow-sm hover:border-slate-400 transition">
-                                            <div>
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <span className="text-[10px] uppercase font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">{drill.category || 'Custom'}</span>
-                                                    {!drill.isPreset && (
-                                                        <button onClick={() => {
-                                                            setDrillBank(drillBank.filter(d => d.id !== drill.id));
-                                                            showToast("Deleted drill from bank.");
-                                                        }} className="text-red-600 hover:text-red-800 font-bold text-xs">Delete</button>
-                                                    )}
-                                                </div>
-                                                <h3 className="font-black text-slate-900 text-sm mb-1">{drill.title}</h3>
-                                                <p className="text-xs text-slate-600 mb-3 line-clamp-2"><strong>Org:</strong> {drill.explanation || 'No description'}</p>
-                                            </div>
-                                            <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-200">
-                                                <button onClick={() => setActiveDrillModal(drill)} className="text-emerald-700 font-bold text-xs hover:underline">👁️ Preview & Edit</button>
-                                                <div className="flex gap-1.5 items-center">
-                                                    <span className="text-[10px] text-slate-400 font-bold">Load:</span>
-                                                    {[1, 2, 3, 4].map(num => (
-                                                        <button key={num} onClick={() => loadDrillIntoActivity(drill, num)} className="bg-slate-900 hover:bg-slate-800 text-white px-2 py-0.5 rounded text-[11px] font-bold transition">Act {num}</button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {viewMode === 'sessionlibrary' && (
-                        <div className="bg-white border-2 border-slate-900 shadow-xl p-6 sm:p-8 rounded-xl">
-                            <h2 className="text-lg font-black uppercase text-slate-900 mb-1">Saved Session Library</h2>
-                            <p className="text-xs text-slate-500 mb-6">Reopen, review, or continue editing finished and unfinished training sessions.</p>
-                            {sessionLibrary.length === 0 ? (
-                                <p className="text-sm text-slate-500 italic bg-slate-50 p-6 rounded-xl border border-dashed border-slate-300 text-center">No saved sessions in your library yet. Click "Save Session to Library" at the top of the Session Sheet tab to save your work.</p>
-                            ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {sessionLibrary.map((item) => (
-                                        <div key={item.id} onClick={() => loadSessionFromLibrary(item)} className="border border-slate-200 rounded-xl p-4.5 bg-slate-50 hover:bg-emerald-50/60 cursor-pointer flex flex-col justify-between shadow-sm transition">
-                                            <div>
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <h3 className="font-black text-slate-900 text-sm">{item.name}</h3>
-                                                    <button onClick={(e) => deleteSessionFromLibrary(item.id, e)} className="text-red-600 hover:text-red-800 font-bold text-xs px-2 py-0.5 rounded transition">Delete</button>
-                                                </div>
-                                                <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-3">Saved: {item.savedAt}</p>
-                                                <p className="text-xs text-slate-600 mb-1"><strong>Team:</strong> {item.data.team || 'Not specified'}</p>
-                                                <p className="text-xs text-slate-600 mb-3"><strong>Date:</strong> {item.data.date || 'Not specified'}</p>
-                                            </div>
-                                            <div className="text-emerald-700 font-bold text-xs flex items-center gap-1">
-                                                <span>Click to Reopen Session →</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setFrames([[]])}
+                      className="rounded bg-red-900/80 px-2.5 py-1 text-xs font-semibold text-red-200 transition hover:bg-red-900"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
-            );
-        }
 
-        ReactDOM.render(<App />, document.getElementById('root'));
+                {arrowStart && (
+                  <div className="mb-2 w-full rounded border border-indigo-700 bg-indigo-900/90 px-3 py-1 text-center text-xs font-bold text-indigo-200 print:hidden">
+                    Click destination point on canvas to complete {tool.replace('_', ' ')} arrow.
+                  </div>
+                )}
+
+                <div className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-xs print:hidden">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">View:</span>
+                    {FIELD_MODES.map((mode) => (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        onClick={() => setFieldMode(mode.value)}
+                        className={`rounded px-2 py-1 transition ${fieldMode === mode.value ? 'bg-emerald-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowZones(!showZones)}
+                      className={`rounded px-2 py-1 transition ${showZones ? 'bg-purple-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                    >
+                      Zones
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowHalfSpaces(!showHalfSpaces)}
+                      className={`rounded px-2 py-1 transition ${showHalfSpaces ? 'bg-amber-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                    >
+                      Half-spaces
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOnionSkin(!onionSkin)}
+                      className={`rounded px-2 py-1 transition ${onionSkin ? 'bg-teal-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                    >
+                      Onion Skin
+                    </button>
+
+                    <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Presets:</span>
+                    <button
+                      type="button"
+                      onClick={() => addFormationPreset('4-3-3')}
+                      className="rounded bg-indigo-600 px-2 py-1 font-bold text-white shadow-sm transition hover:bg-indigo-500"
+                    >
+                      4-3-3
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addFormationPreset('4-4-2')}
+                      className="rounded bg-indigo-600 px-2 py-1 font-bold text-white shadow-sm transition hover:bg-indigo-500"
+                    >
+                      4-4-2
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSnapGrid(!snapGrid)}
+                      className={`rounded px-2 py-1 transition ${snapGrid ? 'bg-blue-600 font-bold text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                    >
+                      Snap grid
+                    </button>
+                    <button
+                      type="button"
+                      onClick={rotateSelectedGoal}
+                      className="rounded bg-slate-800 px-2 py-1 font-semibold text-amber-300 transition hover:bg-slate-700"
+                    >
+                      Rotate Goal ↻
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 rounded border border-slate-800 bg-slate-950 px-3 py-1.5 text-xs print:hidden">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Animation Drill Maker:</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsPlaying(!isPlaying)}
+                      className={`rounded px-3 py-1 font-bold transition shadow-sm ${isPlaying ? 'bg-amber-500 text-slate-950' : 'bg-emerald-600 text-white hover:bg-emerald-500'}`}
+                    >
+                      {isPlaying ? '⏸ Pause' : '▶ Play Sequence'}
+                    </button>
+                    <select value={playSpeed} onChange={(event) => setPlaySpeed(Number(event.target.value))} className="rounded bg-slate-800 px-2 py-1 text-xs font-bold text-white">
+                      <option value={1400}>Slow (1.4s)</option>
+                      <option value={900}>Normal (0.9s)</option>
+                      <option value={500}>Fast (0.5s)</option>
+                    </select>
+                    <span className="text-slate-500">|</span>
+                    <input type="file" ref={fileInputRef} onChange={handleSketchUpload} accept="image/*" className="hidden" />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current.click()}
+                      className="rounded bg-cyan-700 px-2.5 py-1 font-bold text-white shadow-sm transition hover:bg-cyan-600"
+                    >
+                      📷 Image
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                    {frames.map((_, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setCurrentFrameIdx(idx);
+                          setIsPlaying(false);
+                        }}
+                        className={`flex h-6 w-6 items-center justify-center rounded text-xs font-bold transition ${currentFrameIdx === idx ? 'bg-blue-600 text-white ring-2 ring-blue-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+                      >
+                        {idx + 1}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addFrame}
+                      className="ml-1 rounded bg-slate-800 px-2.5 py-1 text-xs font-bold text-emerald-300 transition hover:bg-slate-700"
+                    >
+                      ＋ Keyframe
+                    </button>
+                    {frames.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={deleteCurrentFrame}
+                        className="rounded bg-red-950 px-2 py-1 text-xs text-red-300 transition hover:bg-red-900"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            <canvas
+              ref={canvasRef}
+              width={560}
+              height={320}
+              onMouseDown={handleStart}
+              onMouseMove={handleMove}
+              onMouseUp={() => setDragState(null)}
+              onTouchStart={(event) => {
+                if (event.touches.length === 1) {
+                  const touch = event.touches[0];
+                  handleStart(touch.clientX, touch.clientY);
+                }
+              }}
+              onTouchMove={(event) => {
+                if (event.touches.length === 1) {
+                  const touch = event.touches[0];
+                  handleMove(touch.clientX, touch.clientY);
+                }
+              }}
+              onTouchEnd={() => setDragState(null)}
+              className="h-[320px] w-full max-w-[560px] touch-none cursor-crosshair rounded-lg border-2 border-slate-700 bg-emerald-800 shadow-inner print:border-slate-400"
+            />
+          </div>
+        );
+      }
+
+      function App() {
+        const [viewMode, setViewMode] = React.useState('session');
+        const [collapsed, setCollapsed] = React.useState({ 1: false, 2: false, 3: false, 4: false });
+        const [toast, setToast] = React.useState(null);
+        const [fullscreenCanvas, setFullscreenCanvas] = React.useState(null);
+        const [isPrinting, setIsPrinting] = React.useState(false);
+
+        const [selectedDrillCategory, setSelectedDrillCategory] = React.useState('All');
+        const [drillSearchQuery, setDrillSearchQuery] = React.useState('');
+        const [activeDrillModal, setActiveDrillModal] = React.useState(null);
+        const [isSaveDrillModalOpen, setIsSaveDrillModalOpen] = React.useState(false);
+        const [drillSaveTargetActivity, setDrillSaveTargetActivity] = React.useState('1');
+        const [newDrillTitle, setNewDrillTitle] = React.useState('');
+        const [newDrillCategory, setNewDrillCategory] = React.useState('Rondo & Technical');
+
+        const showToast = (message) => {
+          setToast(message);
+          setTimeout(() => setToast(null), 3000);
+        };
+
+        const [sessionData, setSessionData] = React.useState(() => readStorage(STORAGE_KEYS.session, DEFAULT_SESSION_STATE));
+        const [microcycle, setMicrocycle] = React.useState(() => readStorage(STORAGE_KEYS.microcycle, DEFAULT_MICROCYCLE));
+
+        const [drillBank, setDrillBank] = React.useState(() => {
+          const saved = readStorage(STORAGE_KEYS.drills, PRESET_DRILLS);
+          const existingIds = new Set(saved.map((drill) => drill.id));
+          const missingPresets = PRESET_DRILLS.filter((item) => !existingIds.has(item.id));
+          return [...missingPresets, ...saved];
+        });
+
+        const [sessionLibrary, setSessionLibrary] = React.useState(() => readStorage(STORAGE_KEYS.sessionLibrary, []));
+        const [roster, setRoster] = React.useState(() => readStorage(STORAGE_KEYS.roster, DEFAULT_ROSTER));
+        const [lineup, setLineup] = React.useState(() => readStorage(STORAGE_KEYS.lineup, DEFAULT_LINEUP));
+
+        React.useEffect(() => {
+          localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(sessionData));
+        }, [sessionData]);
+        React.useEffect(() => {
+          localStorage.setItem(STORAGE_KEYS.microcycle, JSON.stringify(microcycle));
+        }, [microcycle]);
+        React.useEffect(() => {
+          localStorage.setItem(STORAGE_KEYS.drills, JSON.stringify(drillBank));
+        }, [drillBank]);
+        React.useEffect(() => {
+          localStorage.setItem(STORAGE_KEYS.sessionLibrary, JSON.stringify(sessionLibrary));
+        }, [sessionLibrary]);
+        React.useEffect(() => {
+          localStorage.setItem(STORAGE_KEYS.roster, JSON.stringify(roster));
+        }, [roster]);
+        React.useEffect(() => {
+          localStorage.setItem(STORAGE_KEYS.lineup, JSON.stringify(lineup));
+        }, [lineup]);
+
+        const handleChange = (event) => {
+          const { name, value } = event.target;
+          setSessionData((prev) => ({ ...prev, [name]: value }));
+        };
+
+        const toggleCollapse = (num) => {
+          setCollapsed((prev) => ({ ...prev, [num]: !prev[num] }));
+        };
+
+        const copyActivity = (sourceNum, targetNum) => {
+          setSessionData((prev) => ({
+            ...prev,
+            [`act${targetNum}Title`]: prev[`act${sourceNum}Title`] + ' (Copy)',
+            [`act${targetNum}Duration`]: prev[`act${sourceNum}Duration`],
+            [`act${targetNum}SetsReps`]: prev[`act${sourceNum}SetsReps`],
+            [`act${targetNum}Explanation`]: prev[`act${sourceNum}Explanation`],
+            [`act${targetNum}CoachingPoints`]: prev[`act${sourceNum}CoachingPoints`],
+            [`act${targetNum}Progression`]: prev[`act${sourceNum}Progression`],
+            [`act${targetNum}Canvas`]: cloneData(prev[`act${sourceNum}Canvas`])
+          }));
+          showToast(`Successfully copied Activity ${sourceNum} into Activity ${targetNum}!`);
+        };
+
+        const openSaveDrillModal = (num) => {
+          setDrillSaveTargetActivity(String(num));
+          setNewDrillTitle(sessionData[`act${num}Title`] || `Drill ${num}`);
+          setNewDrillCategory('Rondo & Technical');
+          setIsSaveDrillModalOpen(true);
+        };
+
+        const confirmSaveDrillToBank = () => {
+          const num = drillSaveTargetActivity;
+          const newDrill = {
+            id: `drill_${Date.now()}`,
+            title: newDrillTitle,
+            category: newDrillCategory,
+            explanation: sessionData[`act${num}Explanation`] || '',
+            coachingPoints: sessionData[`act${num}CoachingPoints`] || '',
+            canvas: cloneData(sessionData[`act${num}Canvas`] || { frames: [[]] })
+          };
+          setDrillBank((prev) => [...prev, newDrill]);
+          setIsSaveDrillModalOpen(false);
+          showToast(`Saved "${newDrill.title}" to your Drill Bank!`);
+        };
+
+        const loadDrillIntoActivity = (drill, targetNum) => {
+          setSessionData((prev) => ({
+            ...prev,
+            [`act${targetNum}Title`]: drill.title,
+            [`act${targetNum}Explanation`]: drill.explanation,
+            [`act${targetNum}CoachingPoints`]: drill.coachingPoints,
+            [`act${targetNum}Canvas`]: cloneData(drill.canvas || { frames: [[]] })
+          }));
+          setViewMode('session');
+          showToast(`Loaded drill into Activity ${targetNum}!`);
+        };
+
+        const saveCurrentSessionToLibrary = () => {
+          const sessionName = prompt('Enter a name for this session (e.g., Build-up Phase vs Low Block):', sessionData.team ? `${sessionData.team} - ${sessionData.date || 'Session'}` : 'Unnamed Session');
+          if (!sessionName) return;
+
+          const savedItem = {
+            id: Date.now(),
+            name: sessionName,
+            savedAt: new Date().toLocaleDateString(),
+            data: sessionData
+          };
+
+          setSessionLibrary((prev) => [...prev, savedItem]);
+          showToast(`Successfully saved "${sessionName}" to Session Library!`);
+        };
+
+        const loadSessionFromLibrary = (libItem) => {
+          setSessionData(libItem.data);
+          setViewMode('session');
+          showToast(`Loaded session "${libItem.name}"!`);
+        };
+
+        const deleteSessionFromLibrary = (id, event) => {
+          event.stopPropagation();
+          if (confirm('Are you sure you want to delete this saved session?')) {
+            setSessionLibrary((prev) => prev.filter((item) => item.id !== id));
+            showToast('Deleted session from library.');
+          }
+        };
+
+        const applyTacticalTag = (num, tagText) => {
+          const key = `act${num}CoachingPoints`;
+          const current = sessionData[key];
+          const updated = current ? `${current}\n• ${tagText}` : `• ${tagText}`;
+          setSessionData((prev) => ({ ...prev, [key]: updated }));
+          showToast(`Added tag: "${tagText}"`);
+        };
+
+        const handlePrint = () => {
+          setIsPrinting(true);
+          setCollapsed({ 1: false, 2: false, 3: false, 4: false });
+          setTimeout(() => {
+            window.print();
+            setIsPrinting(false);
+          }, 300);
+        };
+
+        const handlePdfDownload = () => {
+          setIsPrinting(true);
+          setCollapsed({ 1: false, 2: false, 3: false, 4: false });
+          const element = document.getElementById('session-sheet-container');
+          const options = {
+            margin: 0.5,
+            filename: `${sessionData.team || 'Training'}_Session_Plan.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+          };
+
+          setTimeout(() => {
+            html2pdf().from(element).set(options).save().then(() => {
+              setIsPrinting(false);
+              showToast('PDF Downloaded successfully!');
+            });
+          }, 400);
+        };
+
+        const filteredDrills = drillBank.filter((drill) => {
+          const matchesCategory = selectedDrillCategory === 'All' || drill.category === selectedDrillCategory;
+          const matchesSearch = drill.title.toLowerCase().includes(drillSearchQuery.toLowerCase()) || drill.explanation.toLowerCase().includes(drillSearchQuery.toLowerCase());
+          return matchesCategory && matchesSearch;
+        });
+
+        return (
+          <div className="relative mx-auto max-w-6xl p-4 sm:p-6">
+            {toast && (
+              <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl border border-emerald-500 bg-slate-900 px-4 py-3 text-xs font-bold text-white shadow-2xl animate-bounce">
+                <span className="text-sm text-emerald-400">✔</span>
+                {toast}
+              </div>
+            )}
+
+            {fullscreenCanvas !== null && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-4">
+                <div className="flex w-full max-w-4xl flex-col items-center rounded-xl border border-slate-700 bg-slate-900 p-4">
+                  <div className="mb-3 flex w-full items-center justify-between">
+                    <h3 className="text-sm font-bold text-white">Fullscreen Animated Pitch Editor — Activity {fullscreenCanvas}</h3>
+                    <button type="button" onClick={() => setFullscreenCanvas(null)} className="rounded bg-red-600 px-3 py-1 text-xs font-bold text-white transition hover:bg-red-700">Close ✕</button>
+                  </div>
+                  <div className="flex w-full justify-center">
+                    <div className="w-full max-w-[720px]">
+                      <TacticalSketchpad
+                        initialData={sessionData[`act${fullscreenCanvas}Canvas`]}
+                        onSave={(data) => {
+                          setSessionData((prev) => ({ ...prev, [`act${fullscreenCanvas}Canvas`]: data }));
+                        }}
+                        isPrinting={false}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeDrillModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
+                <div className="flex w-full max-w-lg flex-col gap-4 rounded-2xl border border-slate-300 bg-white p-6 shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <div>
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">{activeDrillModal.category || 'Custom Drill'}</span>
+                      <h3 className="mt-1 text-lg font-black text-slate-900">{activeDrillModal.title}</h3>
+                    </div>
+                    <button type="button" onClick={() => setActiveDrillModal(null)} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 font-bold text-slate-800 transition hover:bg-slate-300">✕</button>
+                  </div>
+
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <strong className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Organization / Explanation:</strong>
+                      <p className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 font-medium text-slate-800">{activeDrillModal.explanation || 'No description provided.'}</p>
+                    </div>
+                    <div>
+                      <strong className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Coaching Points:</strong>
+                      <p className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 font-medium text-slate-800">{activeDrillModal.coachingPoints || 'No coaching points provided.'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-slate-200 pt-4">
+                    <span className="text-[11px] font-bold text-slate-500">Load into active session:</span>
+                    <div className="flex gap-1.5">
+                      {[1, 2, 3, 4].map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => {
+                            loadDrillIntoActivity(activeDrillModal, num);
+                            setActiveDrillModal(null);
+                          }}
+                          className="rounded bg-slate-900 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-slate-800"
+                        >
+                          {num}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isSaveDrillModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
+                <div className="flex w-full max-w-md flex-col gap-4 rounded-2xl border border-slate-300 bg-white p-6 shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                    <h3 className="text-base font-black text-slate-900">Save Drill to Library</h3>
+                    <button type="button" onClick={() => setIsSaveDrillModalOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 font-bold text-slate-800 transition hover:bg-slate-300">✕</button>
+                  </div>
+
+                  <div className="space-y-3 text-xs">
+                    <div>
+                      <label className="mb-1 block font-bold text-slate-700">Drill Title</label>
+                      <input value={newDrillTitle} onChange={(event) => setNewDrillTitle(event.target.value)} className="w-full rounded border border-slate-300 p-2 font-medium text-slate-800" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block font-bold text-slate-700">Category</label>
+                      <select value={newDrillCategory} onChange={(event) => setNewDrillCategory(event.target.value)} className="w-full rounded border border-slate-300 p-2 font-medium text-slate-800">
+                        {['Rondo & Technical', 'Build-up & Possession', 'Pressing & Defense', 'Attacking & Finishing'].map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setIsSaveDrillModalOpen(false)} className="rounded bg-slate-200 px-3 py-2 text-xs font-bold text-slate-800 transition hover:bg-slate-300">Cancel</button>
+                    <button type="button" onClick={confirmSaveDrillToBank} className="rounded bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-500">Save Drill</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-xl">
+              <div>
+                <h1 className="text-2xl font-black uppercase tracking-tight sm:text-3xl">{sessionData.clubName || 'Coach Board'}</h1>
+                <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-500">Session planner · Match day coach board</p>
+              </div>
+
+              <nav className="flex flex-wrap gap-2 print:hidden">
+                {['session', 'drills', 'library', 'roster'].map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setViewMode(tab)}
+                    className={`rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition ${viewMode === tab ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                  >
+                    {tab === 'session' ? 'Session plan' : tab === 'drills' ? 'Drills' : tab === 'library' ? 'Library' : 'Roster'}
+                  </button>
+                ))}
+                <button type="button" onClick={handlePrint} className="rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white hover:bg-blue-500">Print</button>
+              </nav>
+            </div>
+
+            {viewMode === 'session' && (
+              <div id="session-sheet-container" className="space-y-6">
+                <div className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-xl">
+                  <div className="grid gap-3 sm:grid-cols-4">
+                    <input name="clubName" value={sessionData.clubName} onChange={handleChange} className="rounded-lg border p-2 text-sm font-bold sm:col-span-2" placeholder="Club name" />
+                    <input name="team" value={sessionData.team} onChange={handleChange} className="rounded-lg border p-2 text-sm" placeholder="Team" />
+                    <input name="date" type="date" value={sessionData.date} onChange={handleChange} className="rounded-lg border p-2 text-sm" />
+                  </div>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      Club keys / session details
+                      <textarea name="manageOneself" value={sessionData.manageOneself} onChange={handleChange} className="mt-2 min-h-[120px] w-full rounded-lg border p-2 text-sm" placeholder="Manage the ball / self / space..." />
+                    </label>
+                    <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      Coaching priorities
+                      <textarea name="manageTheBall" value={sessionData.manageTheBall} onChange={handleChange} className="mt-2 min-h-[120px] w-full rounded-lg border p-2 text-sm" placeholder="Primary technical and tactical priorities..." />
+                    </label>
+                  </div>
+                </div>
+
+                {[1, 2, 3, 4].map((num) => {
+                  const isOpen = collapsed[num] !== false;
+                  const titleKey = `act${num}Title`;
+                  const durationKey = `act${num}Duration`;
+                  const repsKey = `act${num}SetsReps`;
+                  const explanationKey = `act${num}Explanation`;
+                  const coachingKey = `act${num}CoachingPoints`;
+                  const progressionKey = `act${num}Progression`;
+                  const canvasKey = `act${num}Canvas`;
+
+                  return (
+                    <div key={num} className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-xl">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <button type="button" onClick={() => toggleCollapse(num)} className="text-left text-lg font-black uppercase tracking-tight text-slate-900">
+                          {sessionData[titleKey] || `Activity ${num}`}
+                        </button>
+                        <div className="flex flex-wrap items-center gap-2 print:hidden">
+                          <button type="button" onClick={() => copyActivity(num, num === 4 ? 1 : num + 1)} className="rounded bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-200">Copy</button>
+                          <button type="button" onClick={() => openSaveDrillModal(num)} className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-emerald-500">Save drill</button>
+                          <button type="button" onClick={() => setFullscreenCanvas(num)} className="rounded bg-indigo-600 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-indigo-500">Canvas</button>
+                        </div>
+                      </div>
+
+                      {isOpen && (
+                        <div className="space-y-4">
+                          <div className="grid gap-3 md:grid-cols-[1.5fr_120px_140px]">
+                            <input name={titleKey} value={sessionData[titleKey]} onChange={handleChange} className="rounded border p-2 text-sm font-black" placeholder="Activity title" />
+                            <input name={durationKey} value={sessionData[durationKey]} onChange={handleChange} className="rounded border p-2 text-sm" placeholder="Duration" />
+                            <input name={repsKey} value={sessionData[repsKey]} onChange={handleChange} className="rounded border p-2 text-sm" placeholder="Sets / Reps" />
+                          </div>
+
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                              Explanation / objective
+                              <textarea name={explanationKey} value={sessionData[explanationKey]} onChange={handleChange} className="mt-2 min-h-[120px] w-full rounded border p-2 text-sm" />
+                            </label>
+                            <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                              Coaching points
+                              <textarea name={coachingKey} value={sessionData[coachingKey]} onChange={handleChange} className="mt-2 min-h-[120px] w-full rounded border p-2 text-sm" />
+                            </label>
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                            <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                              Progression
+                              <textarea name={progressionKey} value={sessionData[progressionKey]} onChange={handleChange} className="mt-2 min-h-[100px] w-full rounded border p-2 text-sm" />
+                            </label>
+                            <div className="flex flex-wrap gap-2 self-end print:hidden">
+                              {COMMON_TAGS.map((tag) => (
+                                <button key={tag} type="button" onClick={() => applyTacticalTag(num, tag)} className="rounded bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-200">{tag}</button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 print:bg-slate-50">
+                            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Canvas snapshot</div>
+                            <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                              <TacticalSketchpad
+                                initialData={sessionData[canvasKey]}
+                                onSave={(data) => setSessionData((prev) => ({ ...prev, [canvasKey]: data }))}
+                                isPrinting={isPrinting}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-xl">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="text-xl font-black uppercase tracking-tight">Session microcycle</h2>
+                    <button type="button" onClick={saveCurrentSessionToLibrary} className="rounded bg-emerald-600 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white hover:bg-emerald-500">Save to library</button>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {microcycle.map((day, index) => (
+                      <div key={`${day.day}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">{day.day}</div>
+                        <input value={day.focus} onChange={(event) => {
+                          const updated = [...microcycle];
+                          updated[index].focus = event.target.value;
+                          setMicrocycle(updated);
+                        }} className="mt-2 w-full rounded border p-2 text-sm" />
+                        <select value={day.load} onChange={(event) => {
+                          const updated = [...microcycle];
+                          updated[index].load = event.target.value;
+                          setMicrocycle(updated);
+                        }} className="mt-2 w-full rounded border p-2 text-sm">
+                          {['Low', 'Moderate', 'High', 'Max', 'None'].map((level) => (
+                            <option key={level} value={level}>{level}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {viewMode === 'drills' && (
+              <div className="space-y-6">
+                <div className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-xl">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="text-xl font-black uppercase tracking-tight">Drill bank</h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select value={selectedDrillCategory} onChange={(event) => setSelectedDrillCategory(event.target.value)} className="rounded border p-2 text-sm">
+                        <option value="All">All categories</option>
+                        {['Rondo & Technical', 'Build-up & Possession', 'Pressing & Defense', 'Attacking & Finishing'].map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                      <input value={drillSearchQuery} onChange={(event) => setDrillSearchQuery(event.target.value)} className="rounded border p-2 text-sm" placeholder="Search drills" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {filteredDrills.map((drill) => (
+                      <div key={drill.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <div className="text-sm font-black">{drill.title}</div>
+                          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{drill.category}</div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => setActiveDrillModal(drill)} className="rounded bg-slate-900 px-3 py-2 text-[11px] font-bold uppercase text-white hover:bg-slate-800">Preview</button>
+                          {[1, 2, 3, 4].map((num) => (
+                            <button key={num} type="button" onClick={() => loadDrillIntoActivity(drill, num)} className="rounded bg-slate-100 px-3 py-2 text-[11px] font-bold uppercase text-slate-700 hover:bg-slate-200">Load {num}</button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {viewMode === 'library' && (
+              <div className="space-y-6">
+                <div className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-xl">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h2 className="text-xl font-black uppercase tracking-tight">Saved sessions</h2>
+                    <button type="button" onClick={saveCurrentSessionToLibrary} className="rounded bg-emerald-600 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white hover:bg-emerald-500">Save current</button>
+                  </div>
+
+                  {sessionLibrary.length === 0 ? (
+                    <p className="text-sm italic text-slate-500">No saved sessions yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {sessionLibrary.map((item) => (
+                        <div key={item.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="text-sm font-black">{item.name}</div>
+                            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{item.savedAt}</div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => loadSessionFromLibrary(item)} className="rounded bg-slate-900 px-3 py-2 text-[11px] font-bold uppercase text-white hover:bg-slate-800">Load</button>
+                            <button type="button" onClick={(event) => deleteSessionFromLibrary(item.id, event)} className="rounded bg-red-900 px-3 py-2 text-[11px] font-bold uppercase text-red-100 hover:bg-red-800">Delete</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {viewMode === 'roster' && (
+              <div className="space-y-6">
+                <div className="rounded-2xl border-2 border-slate-900 bg-white p-5 shadow-xl">
+                  <h2 className="mb-4 text-xl font-black uppercase tracking-tight">Roster & lineup</h2>
+
+                  <div className="mb-4 grid gap-3 md:grid-cols-2">
+                    <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      Formation
+                      <select value={lineup.formation} onChange={(event) => setLineup((prev) => ({ ...prev, formation: event.target.value }))} className="mt-2 w-full rounded border p-2 text-sm">
+                        {['4-3-3', '4-4-2'].map((formation) => (
+                          <option key={formation} value={formation}>{formation}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                      Notes
+                      <input value={lineup.notes} onChange={(event) => setLineup((prev) => ({ ...prev, notes: event.target.value }))} className="mt-2 w-full rounded border p-2 text-sm" placeholder="Lineup notes" />
+                    </label>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {roster.map((player) => (
+                      <div key={player.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-white">{player.number}</div>
+                            <div>
+                              <div className="text-sm font-black">{player.name}</div>
+                              <div className="text-[10px] uppercase tracking-wide text-slate-500">{player.position}</div>
+                            </div>
+                          </div>
+                          <select value={player.status} onChange={(event) => {
+                            const updated = [...roster];
+                            updated[player.id - 1].status = event.target.value;
+                            setRoster(updated);
+                          }} className="rounded border p-1 text-[10px] font-bold uppercase">
+                            {['Available', 'Available', 'Doubt', 'Out', 'Rested'].map((status) => (
+                              <option key={status} value={status}>{status}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <textarea value={player.kpiNotes} onChange={(event) => {
+                          const updated = [...roster];
+                          updated[player.id - 1].kpiNotes = event.target.value;
+                          setRoster(updated);
+                        }} className="min-h-[70px] w-full rounded border p-2 text-xs" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <footer className="mt-6 flex flex-wrap justify-between gap-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 print:hidden">
+              <span>Local autosave enabled</span>
+              <span>Print / PDF from your browser</span>
+            </footer>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
-</body>
+  </body>
 </html>
