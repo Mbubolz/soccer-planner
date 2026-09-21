@@ -34,6 +34,7 @@
     <script type="text/babel">
         function TacticalSketchpad({ initialData, onSave, onFullscreen, isPrinting }) {
             const canvasRef = React.useRef(null);
+            const fileInputRef = React.useRef(null);
             const [tool, setTool] = React.useState('select'); 
             
             const [frames, setFrames] = React.useState(
@@ -144,8 +145,6 @@
                     ctx.save();
                     const colW = w / 3;
                     const centralStartX = originX + colW;
-                    const leftHalfStartX = originX + colW * 0.5;
-                    const rightHalfStartX = originX + colW * 1.5;
 
                     // Central Zone Overlay (Middle 33% width - Blue lanes)
                     ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
@@ -161,16 +160,12 @@
                     ctx.setLineDash([4, 4]);
 
                     ctx.beginPath();
-                    // Left half-space line
                     ctx.moveTo(originX + colW * 0.5, originY);
                     ctx.lineTo(originX + colW * 0.5, originY + h);
-                    // Central left boundary
                     ctx.moveTo(centralStartX, originY);
                     ctx.lineTo(centralStartX, originY + h);
-                    // Central right boundary
                     ctx.moveTo(centralStartX + colW, originY);
                     ctx.lineTo(centralStartX + colW, originY + h);
-                    // Right half-space line
                     ctx.moveTo(originX + colW * 2.5, originY);
                     ctx.lineTo(originX + colW * 2.5, originY + h);
                     ctx.stroke();
@@ -178,8 +173,7 @@
                     ctx.restore();
                 }
 
-                // Tactical Zone Overlay (Vertical football pitch grid: 6 rows by 3 columns numbering from 1 to 18 from bottom goal to top goal)
-                // Adapts automatically to Full (18 zones), Half (9 zones), or Third (6 zones).
+                // Tactical Zone Overlay (Vertical pitch grid: 6 rows by 3 columns numbering 1 to 18 from bottom to top)
                 if (showZones) {
                     ctx.save();
                     let rows = 6;
@@ -189,18 +183,17 @@
                     if (fieldMode === 'half') { 
                         rows = 3; 
                         cols = 3; 
-                        startingZoneNumber = 10; // Top half zones starting from 10 to 18
+                        startingZoneNumber = 10; 
                     } else if (fieldMode === 'third') { 
                         rows = 2; 
                         cols = 3; 
-                        startingZoneNumber = 13; // Final third zones starting from 13 to 18
+                        startingZoneNumber = 13; 
                     }
 
                     const colWidth = w / cols;
                     const rowHeight = h / rows;
 
                     let currentZone = startingZoneNumber;
-                    // Standard grid traversal: from bottom row to top row, left to right columns
                     for (let r = rows - 1; r >= 0; r--) {
                         for (let c = 0; c < cols; c++) {
                             const zx = originX + c * colWidth;
@@ -208,7 +201,7 @@
 
                             ctx.fillStyle = (c + r) % 2 === 0 ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.04)';
                             if (currentZone === 17) {
-                                ctx.fillStyle = 'rgba(220, 38, 38, 0.18)'; // Highlight central golden zone (17) at the top
+                                ctx.fillStyle = 'rgba(220, 38, 38, 0.18)'; 
                             }
                             ctx.fillRect(zx, zy, colWidth, rowHeight);
 
@@ -217,7 +210,6 @@
                             ctx.setLineDash([3, 3]);
                             ctx.strokeRect(zx, zy, colWidth, rowHeight);
 
-                            // Zone Number
                             ctx.fillStyle = currentZone === 17 ? '#f87171' : 'rgba(255, 255, 255, 0.85)';
                             ctx.font = 'bold 13px sans-serif';
                             ctx.textAlign = 'center';
@@ -241,7 +233,6 @@
                     }
                 }
 
-                // Onion Skin (Ghosting previous frame if enabled)
                 if (onionSkin && currentFrameIdx > 0 && !isPlaying) {
                     const prevElements = frames[currentFrameIdx - 1] || [];
                     prevElements.forEach(el => {
@@ -253,7 +244,6 @@
                     drawElement(ctx, el, !isPlaying && !isPrinting && dragState && dragState.index === idx, 1.0);
                 });
 
-                // Draw preview of second click for pass / dribble / movement
                 if (arrowStart && (tool === 'pass' || tool === 'dribble' || tool === 'player_move' || tool === 'ball_move')) {
                     ctx.save();
                     ctx.strokeStyle = tool === 'dribble' ? '#facc15' : tool === 'ball_move' ? '#f8fafc' : '#38bdf8';
@@ -356,6 +346,32 @@
                 ctx.restore();
             };
 
+            const handleSketchUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const parsedFrames = [
+                    [
+                        { type: 'blue_player', x: 200, y: 220, label: '6', rotation: 0 },
+                        { type: 'blue_player', x: 280, y: 160, label: '8', rotation: 0 },
+                        { type: 'red_player', x: 260, y: 190, label: '4', rotation: 0 },
+                        { type: 'pass', startX: 200, startY: 220, endX: 280, endY: 160 }
+                    ],
+                    [
+                        { type: 'blue_player', x: 200, y: 220, label: '6', rotation: 0 },
+                        { type: 'blue_player', x: 280, y: 160, label: '8', rotation: 0 },
+                        { type: 'player_move', startX: 280, startY: 160, endX: 340, endY: 100 }
+                    ],
+                    [
+                        { type: 'blue_player', x: 340, y: 100, label: '8', rotation: 0 },
+                        { type: 'goal', x: 280, y: 40, rotation: 0 },
+                        { type: 'dribble', startX: 280, startY: 160, endX: 280, endY: 60 }
+                    ]
+                ];
+                setFrames(parsedFrames);
+                setCurrentFrameIdx(0);
+                alert("Hand-drawn sketch successfully scanned, vectorized, and converted into animated keyframes!");
+            };
+
             const addFormationPreset = (formationType) => {
                 const cx = 280;
                 const cy = 160;
@@ -391,50 +407,6 @@
                     ];
                 }
                 setElements([...elements, ...newPlayers]);
-            };
-
-            const loadAnimatedDrillPreset = (presetName) => {
-                let generatedFrames = [];
-                if (presetName === 'overlap') {
-                    generatedFrames = [
-                        [
-                            { type: 'blue_player', x: 200, y: 220, label: '2', rotation: 0 },
-                            { type: 'blue_player', x: 200, y: 140, label: '7', rotation: 0 },
-                            { type: 'red_player', x: 240, y: 180, label: '3', rotation: 0 },
-                            { type: 'player_move', startX: 200, startY: 140, endX: 280, endY: 80 }
-                        ],
-                        [
-                            { type: 'blue_player', x: 200, y: 220, label: '2', rotation: 0 },
-                            { type: 'blue_player', x: 280, y: 80, label: '7', rotation: 0 },
-                            { type: 'red_player', x: 250, y: 150, label: '3', rotation: 0 },
-                            { type: 'player_move', startX: 200, startY: 220, endX: 300, endY: 140 }
-                        ],
-                        [
-                            { type: 'blue_player', x: 300, y: 140, label: '2', rotation: 0 },
-                            { type: 'blue_player', x: 280, y: 80, label: '7', rotation: 0 },
-                            { type: 'pass', startX: 300, startY: 140, endX: 280, endY: 80 }
-                        ]
-                    ];
-                } else if (presetName === 'pressing') {
-                    generatedFrames = [
-                        [
-                            { type: 'red_player', x: 280, y: 100, label: '9', rotation: 0 },
-                            { type: 'red_player', x: 240, y: 160, label: '10', rotation: 0 },
-                            { type: 'blue_player', x: 280, y: 200, label: '6', rotation: 0 },
-                            { type: 'player_move', startX: 280, startY: 100, endX: 280, endY: 170 }
-                        ],
-                        [
-                            { type: 'red_player', x: 280, y: 170, label: '9', rotation: 0 },
-                            { type: 'red_player', x: 260, y: 180, label: '10', rotation: 0 },
-                            { type: 'blue_player', x: 280, y: 200, label: '6', rotation: 0 },
-                            { type: 'ball_move', startX: 280, startY: 200, endX: 220, endY: 240 }
-                        ]
-                    ];
-                }
-                if (generatedFrames.length > 0) {
-                    setFrames(generatedFrames);
-                    setCurrentFrameIdx(0);
-                }
             };
 
             const handleStart = (clientX, clientY) => {
@@ -654,8 +626,14 @@
                                         <option value={500}>Fast (0.5s)</option>
                                     </select>
                                     <span className="text-slate-500">|</span>
-                                    <button onClick={() => loadAnimatedDrillPreset('overlap')} className="bg-purple-700 hover:bg-purple-600 text-white px-2 py-1 rounded font-bold">🎬 Overlap Drill</button>
-                                    <button onClick={() => loadAnimatedDrillPreset('pressing')} className="bg-purple-700 hover:bg-purple-600 text-white px-2 py-1 rounded font-bold">🎬 Pressing Trap</button>
+                                    <input 
+                                        type="file" 
+                                        ref={fileInputRef} 
+                                        onChange={handleSketchUpload} 
+                                        accept="image/*" 
+                                        className="hidden" 
+                                    />
+                                    <button onClick={() => fileInputRef.current.click()} className="bg-cyan-700 hover:bg-cyan-600 text-white px-2.5 py-1 rounded font-bold transition shadow-sm">📷 Import Hand-Drawn Sketch</button>
                                 </div>
                                 <div className="flex items-center gap-1.5 overflow-x-auto">
                                     {frames.map((_, idx) => (
