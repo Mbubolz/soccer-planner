@@ -198,6 +198,8 @@
         const [snapGrid, setSnapGrid] = React.useState(false);
         const [playerNumberInput, setPlayerNumberInput] = React.useState('9');
         const GRID_SIZE = 30;
+        const CANVAS_WIDTH = 960;
+        const CANVAS_HEIGHT = 540;
 
         const elements = frames[currentFrameIdx] || [];
 
@@ -899,8 +901,8 @@
 
             <canvas
               ref={canvasRef}
-              width={560}
-              height={320}
+              width={CANVAS_WIDTH}
+              height={CANVAS_HEIGHT}
               onMouseDown={handleStart}
               onMouseMove={handleMove}
               onMouseUp={() => setDragState(null)}
@@ -917,7 +919,7 @@
                 }
               }}
               onTouchEnd={() => setDragState(null)}
-              className="h-[320px] w-full max-w-[560px] touch-none cursor-crosshair rounded-lg border-2 border-slate-700 bg-emerald-800 shadow-inner print:border-slate-400"
+              className="h-auto w-full max-w-[960px] touch-none cursor-crosshair rounded-lg border-2 border-slate-700 bg-emerald-800 shadow-inner print:border-slate-400"
             />
           </div>
         );
@@ -1122,7 +1124,7 @@
                     <button type="button" onClick={() => setFullscreenCanvas(null)} className="rounded bg-red-600 px-3 py-1 text-xs font-bold text-white transition hover:bg-red-700">Close ✕</button>
                   </div>
                   <div className="flex w-full justify-center">
-                    <div className="w-full max-w-[720px]">
+                    <div className="w-full max-w-[960px]">
                       <TacticalSketchpad
                         initialData={sessionData[`act${fullscreenCanvas}Canvas`]}
                         onSave={(data) => {
